@@ -251,7 +251,12 @@ fn pair(client: &mut Client, account: &str, phone: Option<String>, json_out: boo
         match event["event"].as_str() {
             Some("pairing") if event["account"] == account && !json_out => match event["kind"].as_str() {
                 Some("code") => println!("Pairing code: {}", event["data"].as_str().unwrap_or("")),
-                _ => println!("QR code data (scan it from the window, phase P2): {}", event["data"].as_str().unwrap_or("")),
+                _ => {
+                    // Clear the screen: a new code replaces the old one every 20 seconds or so.
+                    print!("\x1b[2J\x1b[H");
+                    println!("{}", qr_text(event["data"].as_str().unwrap_or("")));
+                    println!("Scan with the phone: WhatsApp › Settings › Linked devices › Link a device");
+                }
             },
             Some("account") if event["account"]["key"] == account => match event["account"]["state"].as_str() {
                 Some("connected") => {
@@ -267,5 +272,18 @@ fn pair(client: &mut Client, account: &str, phone: Option<String>, json_out: boo
             },
             _ => {}
         }
+    }
+}
+
+/// A QR code drawn with half blocks, dark on light (phones need the quiet zone and the contrast).
+fn qr_text(data: &str) -> String {
+    match qrcode::QrCode::new(data.as_bytes()) {
+        Ok(code) => code
+            .render::<qrcode::render::unicode::Dense1x2>()
+            .dark_color(qrcode::render::unicode::Dense1x2::Light)
+            .light_color(qrcode::render::unicode::Dense1x2::Dark)
+            .quiet_zone(true)
+            .build(),
+        Err(_) => data.to_string(),
     }
 }

@@ -19,6 +19,16 @@ Read before changing anything:
 - Message contents, keys and tokens never go to logs, argv or error messages.
 - Messages, names and file names are untrusted: plain-text rendering in the window.
 
+## WhatsApp connector (connectors/whatsapp)
+
+- stdout is the protocol: whatsmeow's logger writes to stderr, at WARN (its debug output can contain messages).
+- Ids: the daemon sees canonical JIDs (phone number when a LID maps to one, no device part). WhatsApp acts on the
+  raw ones: `connector.db` (`msgs`) keeps the raw chat and sender of recent messages for receipts, reactions,
+  replies and revokes.
+- Read whatsmeow's source for signatures (`~/go/pkg/mod/go.mau.fi/whatsmeow@…`); its API changes (contexts were added
+  everywhere in 2025).
+- Build: `make connectors` (cgo for SQLite, about a minute the first time).
+
 ## Pitfalls already met
 
 - **Store lock and temporaries**: `match store().x() { … }` and `if let … = store().x() { … }` keep the store's

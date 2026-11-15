@@ -1,6 +1,6 @@
 # Conversations (fili-im): plan
 
-Status: P0 (foundations) done 2026-11-15; next P1 (WhatsApp connector).
+Status: P0 done 2026-11-15; P1 connector built 2026-11-15 (text, receipts, reactions, edits, deletes, history, media download; sending files left), waiting for a live test.
 
 Conversations is Filigrane's instant messaging application: one place for WhatsApp, then Telegram, Discord, Signal and
 others. Program `fili-im`, display name **Conversations** (plain in French and English, next to Casier, Facteur,

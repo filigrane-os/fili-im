@@ -10,8 +10,25 @@ Discord… in one light native application.
   capabilities, never special cases in the interface.
 - **A window** (Qt Quick, coming in phase P2) and a **CLI** are clients of the daemon.
 
-Status: phase P0 (foundations) done: protocol, store, daemon, CLI, fake connector, conformance suite. See
+Status: P0 (foundations) done; P1 (WhatsApp connector, text) built, waiting for a live test. See
 [docs/plan.md](docs/plan.md).
+
+## WhatsApp
+
+`connectors/whatsapp/` is a Go program on [whatsmeow](https://github.com/tulir/whatsmeow) (MPL-2.0), linked to the
+phone like WhatsApp Web. Building it needs Go and a C compiler (SQLite through cgo); `make build` puts
+`fili-im-whatsapp` next to `fili-im`.
+
+```sh
+make release
+target/release/fili-im daemon &
+target/release/fili-im add whatsapp                       # → whatsapp-1
+target/release/fili-im pair whatsapp-1                    # QR code in the terminal
+target/release/fili-im pair whatsapp-1 --phone +33612345678   # or a code to type on the phone
+```
+
+WhatsApp does not allow third-party clients in its terms: using one on a personal account carries a small risk of a
+ban. The phone stays the main device; a linked device left offline for about two weeks is logged out.
 
 ## Try it with the fake connector
 
@@ -40,7 +57,7 @@ target/debug/fili-im watch             # the daemon's events, as JSON lines
 
 ## Development
 
-`make check` (rustfmt, clippy, tests). The conformance suite runs against any connector:
+`make check` (rustfmt, clippy, gofmt, go vet, all tests, conformance of the WhatsApp connector). The conformance suite runs against any connector:
 `FILI_IM_CONNECTOR=/path/to/fili-im-<platform> cargo test --test conformance`.
 
 License: GPL-3.0-or-later.
