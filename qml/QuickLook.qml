@@ -25,6 +25,7 @@ Rectangle {
     readonly property bool remote: path.indexOf("http") === 0
     readonly property bool isYoutube: kind === "youtube"
     property var titles: ({})
+    property string playerError: ""
     readonly property bool isPicture: kind === "image" || kind === "sticker"
     readonly property bool isVideo: kind === "video" || kind === "videourl"
     readonly property bool isAudio: kind === "audio" || kind === "voice"
@@ -129,12 +130,16 @@ Rectangle {
         return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
     }
     function togglePlay() {
+        autoplay = false;
         if (player.playbackState === MediaPlayer.PlayingState) player.pause(); else player.play();
     }
+    // A new file starts playing as soon as the player has loaded it
+    property bool autoplay: true
     onPathChanged: {
         player.stop();
+        autoplay = true;
+        playerError = "";
         player.source = playable && path !== "" ? (remote ? path : "file://" + encodeURI(path)) : "";
-        if (playable && path !== "" && visible) player.play();
     }
     onKindChanged: if (!playable) player.source = ""
 
@@ -145,6 +150,12 @@ Rectangle {
 
     MediaPlayer {
         id: player
+        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && ql.autoplay && ql.visible) play()
+        onErrorOccurred: (error, text) => {
+            // A stream that cannot be read: save the file and play the copy
+            if (ql.remote && ql.current && ql.kind !== "videourl" && !ql.paths[ql.current.id]) ql.fetch(ql.current);
+            else ql.playerError = text;
+        }
         videoOutput: video
         audioOutput: AudioOutput { }
     }
@@ -189,11 +200,22 @@ Rectangle {
         id: stage
         anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: bar.top; leftMargin: 64; rightMargin: 64 }
         MouseArea { anchors.fill: parent; onClicked: ql.playable && ql.path !== "" ? ql.togglePlay() : undefined }
+        readonly property bool animatedFile: /\.(gif|webp|apng)$/i.test(ql.path)
+        Image {
+            anchors.fill: parent
+            visible: ql.isPicture && ql.path !== "" && !stage.animatedFile
+            source: visible ? "file://" + encodeURI(ql.path) : ""
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            cache: false
+            autoTransform: true
+            sourceSize.width: 2400
+        }
         AnimatedImage {
             anchors.fill: parent
             playing: visible
-            visible: ql.isPicture && ql.path !== ""
-            source: ql.isPicture && ql.path !== "" ? "file://" + encodeURI(ql.path) : ""
+            visible: ql.isPicture && ql.path !== "" && stage.animatedFile
+            source: visible ? "file://" + encodeURI(ql.path) : ""
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             cache: false
@@ -275,8 +297,8 @@ Rectangle {
         // Waiting / failure
         Text {
             anchors.centerIn: parent
-            visible: ql.current !== null && ql.path === "" && (ql.isPicture || ql.isVideo)
-            text: ql.current && ql.failed[ql.current.id] ? ql.failed[ql.current.id] : Conversations.tr("Downloading…")
+            visible: ql.current !== null && ((ql.path === "" && (ql.isPicture || ql.isVideo)) || ql.playerError !== "")
+            text: ql.playerError !== "" ? ql.playerError : ql.current && ql.failed[ql.current.id] ? ql.failed[ql.current.id] : Conversations.tr("Downloading…")
             font.family: FiliTheme.font
             font.pixelSize: FiliTheme.sizeList
             color: FiliTheme.muted

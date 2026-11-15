@@ -99,6 +99,10 @@ impl Fake {
             me: Some(SelfInfo { id: "me".into(), name: Some("Me".into()), phone: Some("+33600000000".into()) }),
             logout_in_s: None,
         });
+        if std::env::var("FILI_IM_FAKE_SCENE").as_deref() == Ok("sam") {
+            self.sam_scene();
+            return;
+        }
         for (id, name, phone) in [("paul", "Paul", "+33611111111"), ("lea", "Léa", "+33622222222")] {
             self.out.event(Event::ContactUpsert {
                 contact: Contact { id: id.into(), name: Some(name.into()), phone: Some(phone.into()) },
@@ -119,11 +123,43 @@ impl Fake {
         });
     }
 
+    /// A one-conversation scene for looking at how a second platform shows up next to WhatsApp (development only):
+    /// a contact without a phone number (a username, as on Telegram) and a short conversation.
+    fn sam_scene(&self) {
+        self.out.event(Event::ContactUpsert {
+            contact: Contact { id: "sam".into(), name: Some("Sam".into()), phone: None },
+        });
+        self.out.event(Event::ChatUpsert { chat: Chat { id: "sam".into(), kind: Some("direct".into()), ..Default::default() } });
+        let t = now() - 2 * 3_600_000;
+        let lines: [(bool, &str); 6] = [
+            (false, "Coucou, tu rentres à quelle heure ce soir ?"),
+            (true, "Vers 19 h, je prends le pain en passant"),
+            (false, "Parfait ! On regarde un film ?"),
+            (true, "Avec plaisir, tu choisis"),
+            (false, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            (false, "Celui-là, haha"),
+        ];
+        let messages = lines
+            .iter()
+            .enumerate()
+            .map(|(i, (mine, text))| {
+                message(&format!("d{i}"), "sam", if *mine { None } else { Some("sam") }, t + i as i64 * 90_000, text)
+            })
+            .collect();
+        self.out.event(Event::HistoryBatch { messages, progress: Some(Progress { done: 6, total: Some(6) }) });
+    }
+
     fn reply_later(self: &Arc<Self>, chat: String, text: String) {
         let fake = self.clone();
         std::thread::spawn(move || {
             std::thread::sleep(env_ms("FILI_IM_FAKE_REPLY_MS", 500));
-            let sender = if chat == "family" { "lea" } else { "paul" };
+            let sender = if chat == "family" {
+                "lea"
+            } else if chat == "sam" {
+                "sam"
+            } else {
+                "paul"
+            };
             let id = fake.next_id();
             fake.out.event(Event::MessageNew {
                 live: true,
@@ -138,7 +174,11 @@ impl Fake {
         let need_connected =
             || if *self.connected.lock().unwrap() { Ok(()) } else { Err(("not_connected", "not paired".to_string())) };
         let known_chat = |chat: &str| {
-            if chat == "paul" || chat == "family" { Ok(()) } else { Err(("not_found", format!("no chat {chat:?}"))) }
+            if chat == "paul" || chat == "family" || chat == "sam" {
+                Ok(())
+            } else {
+                Err(("not_found", format!("no chat {chat:?}")))
+            }
         };
         match cmd.cmd.as_str() {
             "pair" => {
@@ -233,10 +273,11 @@ fn main() {
         counter: Mutex::new(0),
         connected: Mutex::new(false),
     });
+    let platform = std::env::var("FILI_IM_FAKE_PLATFORM").unwrap_or_else(|_| "fake".into());
     fake.out.event(Event::Hello {
         protocol: PROTOCOL,
-        platform: "fake".into(),
-        name: "Fake".into(),
+        platform: platform.clone(),
+        name: if platform == "fake" { "Fake".into() } else { "Telegram (simulation)".into() },
         version: env!("CARGO_PKG_VERSION").into(),
         capabilities: capabilities(),
     });

@@ -9,6 +9,8 @@ Item {
     property int chatId: 0
     property string title: ""
     property int size: 32
+    // Platform of the conversation (a small mark in the corner) when several are in use
+    property string platform: ""
     readonly property string path: chatId ? (win.avatars[chatId] || "") : ""
     width: size
     height: size
@@ -45,6 +47,18 @@ Item {
         radius: width / 2
         visible: false
         layer.enabled: true
+    }
+    Rectangle {
+        visible: av.platform !== ""
+        anchors { right: parent.right; bottom: parent.bottom; rightMargin: -2; bottomMargin: -2 }
+        width: Math.max(12, Math.round(av.size * 0.38))
+        height: width
+        radius: width / 2
+        color: win.platformColor(av.platform)
+        border.width: 2
+        border.color: FiliTheme.background
+        Text { anchors.centerIn: parent; text: win.platformName(av.platform).charAt(0); font.pixelSize: Math.round(parent.width * 0.6); font.bold: true; color: "white" }
+        z: 2
     }
     MultiEffect {
         anchors.fill: parent

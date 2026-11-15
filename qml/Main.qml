@@ -90,6 +90,16 @@ ApplicationWindow {
         avatarAsked[id] = true;
         rpc("avatar.fetch", { chat: id }, r => { const a = Object.assign({}, avatars); a[id] = r.path; avatars = a; }, e => { if (e && e.code === "not_connected") delete avatarAsked[id]; });
     }
+    // Several platforms: a conversation says which one it is on, and the same person on another one is offered
+    readonly property bool multi: { const p = {}; accounts.forEach(a => { p[a.platform] = true; }); return Object.keys(p).length > 1; }
+    function platformOf(c) { const a = c ? accountByKey(c.account) : null; return a ? a.platform : ""; }
+    function platformName(p) { return ({ whatsapp: "WhatsApp", telegram: "Telegram" })[p] || p; }
+    function platformColor(p) { return ({ whatsapp: "#2fa84f", telegram: "#2a8fd6" })[p] || FiliTheme.muted; }
+    function siblings(c) {
+        if (!c || c.kind !== "direct") return [];
+        const n = c.title.trim().toLowerCase();
+        return chats.filter(x => x.id !== c.id && x.kind === "direct" && x.account !== c.account && x.title.trim().toLowerCase() === n);
+    }
     function showContact(chat) { contactCard.show(chat); }
     // Quick Look on the media of the open conversation
     function quickLook(id) { quickLookCard.open(conversation.messages, id); }
@@ -215,6 +225,8 @@ ApplicationWindow {
             else if (name === "refresh") win.reload();
             else if (name === "reply") conversation.replyToLast();
             else if (name === "focus-composer") conversation.focusComposer();
+            else if (name.startsWith("status-")) rpc("presence.set", { state: name.slice(7) });
+            else if (name === "contact-info") { const c = chatById(current); if (c) showContact(c); }
             else if (name === "add-account") win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }));
             else if (name === "pair") sidebar.pairFirst();
             else if (name === "new-conversation") switchCard.show();
@@ -377,7 +389,7 @@ ApplicationWindow {
         Text {
             id: states
             anchors { right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
-            text: win.accounts.map(a => (a.self_name || a.name) + ": " + sidebar.stateWord(a)).join("   ")
+            text: win.accounts.map(a => (win.multi ? platformName(a.platform) + " " : "") + (a.self_name || a.name) + ": " + sidebar.stateWord(a)).join("   ")
             font.family: FiliTheme.font
             font.pixelSize: FiliTheme.sizeSmall
             color: FiliTheme.textSecondary

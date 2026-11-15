@@ -44,11 +44,14 @@ Rectangle {
             Keys.onEnterPressed: if (card.found.length) card.choose(card.found[0].c)
         }
         GridView {
+            id: grid
             anchors { left: parent.left; right: parent.right; top: field.bottom; bottom: parent.bottom; margins: FiliTheme.space3 }
             cellWidth: 36
             cellHeight: 36
             clip: true
             model: card.found
+            boundsBehavior: Flickable.StopAtBounds
+            KineticScroll {}
             delegate: Rectangle {
                 required property var modelData
                 width: 36
@@ -59,5 +62,6 @@ Rectangle {
                 MouseArea { id: area; anchors.fill: parent; hoverEnabled: true; onClicked: card.choose(modelData.c) }
             }
         }
+        FiliScrollBar { flick: grid; anchors { top: grid.top; bottom: grid.bottom; right: grid.right } }
     }
 }

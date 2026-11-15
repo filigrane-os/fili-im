@@ -71,7 +71,8 @@ Rectangle {
             if (thenOpen) Conversations.openUrl("file://" + encodeURI(r.path));
         }, e => {
             fetching = false;
-            win.notice = (e && e.message) || Conversations.tr("The file could not be downloaded");
+            // Pictures fetched on their own (expired files, offline) stay quiet; a click that fails says so
+            if (thenOpen) win.notice = (e && e.message) || Conversations.tr("The file could not be downloaded");
         });
     }
     function sizeText(n) {
@@ -155,22 +156,37 @@ Rectangle {
             id: picture
             visible: b.showsPicture
             width: parent.width
-            height: visible ? (image.status === Image.Ready && image.implicitWidth > 0 ? Math.min(360, width * image.implicitHeight / image.implicitWidth) : 120) : 0
+            // Stills (and the still of a video) use Image, which honours the orientation of photos; only GIF, WebP and APNG animate
+            readonly property bool animatedFile: b.isPicture && /\.(gif|webp|apng)$/i.test(b.mediaPath)
+            readonly property var shown: animatedFile ? anim : image
+            height: visible ? (shown.status === Image.Ready && shown.implicitWidth > 0 ? Math.min(360, width * shown.implicitHeight / shown.implicitWidth) : 120) : 0
             radius: FiliTheme.radiusControl
             color: FiliTheme.backgroundDeep
             clip: true
-            AnimatedImage {
+            Image {
                 id: image
                 anchors.fill: parent
-                source: b.isVideo ? (b.thumbPath !== "" ? "file://" + encodeURI(b.thumbPath) : "") : b.mediaPath !== "" ? "file://" + encodeURI(b.mediaPath) : ""
+                visible: !picture.animatedFile
+                source: picture.animatedFile ? "" : b.isVideo ? (b.thumbPath !== "" ? "file://" + encodeURI(b.thumbPath) : "") : b.mediaPath !== "" ? "file://" + encodeURI(b.mediaPath) : ""
                 asynchronous: true
                 cache: true
-                playing: b.isPicture
+                autoTransform: true
+                sourceSize.width: 640
+                fillMode: Image.PreserveAspectFit
+            }
+            AnimatedImage {
+                id: anim
+                anchors.fill: parent
+                visible: picture.animatedFile
+                source: picture.animatedFile ? "file://" + encodeURI(b.mediaPath) : ""
+                asynchronous: true
+                cache: true
+                playing: visible
                 sourceSize.width: 640
                 fillMode: Image.PreserveAspectFit
             }
             Rectangle {
-                visible: b.isVideo && image.status === Image.Ready
+                visible: b.isVideo && picture.shown.status === Image.Ready
                 anchors.centerIn: parent
                 width: 44
                 height: 44
@@ -180,7 +196,7 @@ Rectangle {
             }
             Text {
                 anchors.centerIn: parent
-                visible: image.status !== Image.Ready
+                visible: picture.shown.status !== Image.Ready
                 text: b.fetching ? Conversations.tr("Downloading…") : (b.mediaPath === "" ? "▣" : "")
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
@@ -293,7 +309,7 @@ Rectangle {
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         TextEdit {
-            visible: b.body !== ""
+            visible: b.body !== "" && !(b.card && b.body.trim() === b.linkUrl)
             width: parent.width
             text: b.body
             readOnly: true

@@ -47,6 +47,7 @@ Rectangle {
                 size: 36
                 chatId: row.hit ? modelData.chat : modelData.id
                 title: row.hit ? (modelData.chat_title || "?") : modelData.title
+                platform: win.multi && row.chat ? win.platformOf(row.chat) : ""
             }
             Text {
                 anchors { left: mark.right; leftMargin: FiliTheme.space3; right: when.left; rightMargin: FiliTheme.space2; top: parent.top; topMargin: 10 }

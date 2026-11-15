@@ -98,16 +98,29 @@ Rectangle {
             size: 34
             chatId: view.chat ? view.chat.id : 0
             title: view.chat ? view.chat.title : ""
+            platform: win.multi ? win.platformOf(view.chat) : ""
         }
-        Text {
+        Column {
             anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
-            text: view.chat ? view.chat.title : ""
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            font.family: FiliTheme.font
-            font.pixelSize: FiliTheme.size + 1
-            font.weight: FiliTheme.weightAccent
-            color: FiliTheme.text
+            Text {
+                width: parent.width
+                text: view.chat ? view.chat.title : ""
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                font.family: FiliTheme.font
+                font.pixelSize: FiliTheme.size + 1
+                font.weight: FiliTheme.weightAccent
+                color: FiliTheme.text
+            }
+            Text {
+                visible: win.multi
+                width: parent.width
+                text: view.chat ? win.platformName(win.platformOf(view.chat)) : ""
+                elide: Text.ElideRight
+                font.family: FiliTheme.font
+                font.pixelSize: FiliTheme.sizeSmall
+                color: FiliTheme.muted
+            }
         }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.chat) win.showContact(view.chat) }
     }
@@ -175,8 +188,8 @@ Rectangle {
                 color: FiliTheme.surface
                 border.width: FiliTheme.borderWidth
                 border.color: FiliTheme.border
-                // On the bubble itself, from its outer corner inwards, so it stays in the window whatever its width
-                y: bubble.y + 3
+                // Astride the top edge of the bubble, from its outer corner inwards: in the window whatever the width, and the text stays readable
+                y: bubble.y - 20
                 x: m.from_me ? bubble.x + bubble.width - width - 4 : bubble.x + 4
                 z: 5
                 HoverHandler { id: toolsHover }

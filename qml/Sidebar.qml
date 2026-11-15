@@ -20,7 +20,13 @@ Rectangle {
         const a = win.accounts.find(x => x.state === "needs_pairing" || x.state === "logged_out");
         if (a) win.rpc("account.pair", { account: a.key });
     }
-    function platformName(p) { return p === "whatsapp" ? "WhatsApp" : p; }
+    // With several platforms the account is named by its platform (and by its owner when a platform has two accounts)
+    function accountLabel(a) {
+        if (!win.multi) return a.self_name || side.platformName(a.platform);
+        const same = win.accounts.filter(x => x.platform === a.platform).length > 1;
+        return side.platformName(a.platform) + (same && a.self_name ? " · " + a.self_name : "");
+    }
+    function platformName(p) { return win.platformName(p); }
 
     Rectangle { anchors { top: parent.top; bottom: parent.bottom; right: parent.right } width: FiliTheme.borderWidth; color: FiliTheme.border }
 
@@ -112,7 +118,7 @@ Rectangle {
                 model: side.folded.accounts ? [] : win.accounts
                 Row28 {
                     required property var modelData
-                    label: modelData.self_name || side.platformName(modelData.platform)
+                    label: side.accountLabel(modelData)
                     detail: side.stateWord(modelData)
                     selected: win.filter === "account:" + modelData.key
                     onClicked: win.filter = "account:" + modelData.key

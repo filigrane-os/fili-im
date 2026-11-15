@@ -16,12 +16,21 @@ Rectangle {
                 required property int modelData
                 readonly property var chat: win.chatById(modelData)
                 height: FiliTheme.tabHeight
-                width: Math.max(80, Math.min(180, label.implicitWidth + 14 + 3 * FiliTheme.space4))
+                width: Math.max(80, Math.min(180, label.implicitWidth + 14 + 3 * FiliTheme.space4 + (win.multi ? 12 : 0)))
                 radius: FiliTheme.radiusControl
                 color: modelData === win.current ? FiliTheme.surfaceActive : tabArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
+                Rectangle {
+                    id: platformDot
+                    visible: win.multi && chat !== null
+                    anchors { left: parent.left; leftMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: win.platformColor(win.platformOf(chat))
+                }
                 Text {
                     id: label
-                    anchors { left: parent.left; leftMargin: FiliTheme.space4; right: close.left; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+                    anchors { left: parent.left; leftMargin: FiliTheme.space4 + (win.multi ? 8 : 0); right: close.left; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
                     text: (chat ? chat.title : "") + (chat && chat.unread > 0 ? " (" + chat.unread + ")" : "")
                     elide: Text.ElideRight
                     textFormat: Text.PlainText

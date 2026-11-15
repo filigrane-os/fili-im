@@ -14,6 +14,7 @@ Rectangle {
     property var media: []
     property string filter: "all"
     readonly property var shown: media.filter(m => filter === "all" || (filter === "visual" ? (m.media.kind === "image" || m.media.kind === "video" || m.media.kind === "sticker") : (m.media.kind !== "image" && m.media.kind !== "video" && m.media.kind !== "sticker")))
+    readonly property var others: win.siblings(chat)
     readonly property bool group: chat ? chat.kind !== "direct" : false
     readonly property string phone: {
         if (!chat || group) return "";
@@ -52,7 +53,7 @@ Rectangle {
             id: head
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space5 }
             spacing: FiliTheme.space2
-            Avatar { anchors.horizontalCenter: parent.horizontalCenter; chatId: card.chat ? card.chat.id : 0; title: card.chat ? card.chat.title : ""; size: 96 }
+            Avatar { anchors.horizontalCenter: parent.horizontalCenter; chatId: card.chat ? card.chat.id : 0; title: card.chat ? card.chat.title : ""; size: 96; platform: win.multi ? win.platformOf(card.chat) : "" }
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
@@ -67,7 +68,7 @@ Rectangle {
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: [card.group ? Conversations.tr("Group") : card.phone, card.accountName].filter(x => x !== "").join(" · ")
+                text: [card.group ? Conversations.tr("Group") : card.phone, win.multi ? win.platformName(win.platformOf(card.chat)) : "", card.accountName].filter(x => x !== "").join(" · ")
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 font.family: FiliTheme.font
@@ -82,6 +83,17 @@ Rectangle {
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeSmall
                 color: FiliTheme.muted
+            }
+            // The same person on another platform (same name for now): one click to the other conversation
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: FiliTheme.space2
+                visible: card.others.length > 0
+                Text { anchors.verticalCenter: parent.verticalCenter; text: Conversations.tr("Also on"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.textSecondary }
+                Repeater {
+                    model: card.others
+                    TextButton { required property var modelData; label: win.platformName(win.platformOf(modelData)); onClicked: { card.visible = false; win.openChat(modelData.id); } }
+                }
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter

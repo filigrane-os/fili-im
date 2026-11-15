@@ -36,6 +36,11 @@ pub const ACTIONS: &[&str] = &[
     "copy",
     "select-all",
     "focus-composer",
+    "contact-info",
+    "status-available",
+    "status-away",
+    "status-busy",
+    "status-offline",
 ];
 
 /// `open-chat:<id>`: show a conversation (from a notification or the bar panel).
