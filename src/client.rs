@@ -29,7 +29,15 @@ impl std::error::Error for Refused {}
 impl Client {
     pub fn connect() -> Result<Client> {
         let path = paths::socket();
-        let stream = UnixStream::connect(&path).with_context(|| "the daemon is not running (start it with: fili-im daemon)")?;
+        // A daemon started a moment ago (`fili-im daemon & fili-im add …`) may not have opened its socket yet.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let stream = loop {
+            match UnixStream::connect(&path) {
+                Ok(stream) => break stream,
+                Err(_) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(100)),
+                Err(e) => return Err(e).context("the daemon is not running (start it with: fili-im daemon)"),
+            }
+        };
         Ok(Client { reader: BufReader::new(stream.try_clone()?), writer: stream, next: 1 })
     }
 
