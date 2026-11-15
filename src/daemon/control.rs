@@ -72,11 +72,16 @@ async fn client(daemon: Arc<Daemon>, stream: UnixStream) {
                 forwarder = Some(tokio::spawn(forward(daemon.events.subscribe(), out.clone())));
             }
             Ok(json!({}))
-        } else if method == "media.fetch" {
+        } else if method == "media.fetch" || method == "media.stream" || method == "media.thumb" {
             // A download can take minutes: answered from its own task so the connection keeps serving other requests.
             let (daemon, out) = (daemon.clone(), out.clone());
             tokio::spawn(async move {
-                let reply = match fetch_media(&daemon, &params).await {
+                let result = match method.as_str() {
+                    "media.stream" => media_source(&daemon, &params).await,
+                    "media.thumb" => media_thumb(&daemon, &params).await,
+                    _ => fetch_media(&daemon, &params).await,
+                };
+                let reply = match result {
                     Ok(result) => json!({"reply": id, "ok": true, "result": result}),
                     Err(e) => json!({"reply": id, "ok": false, "error": e}),
                 };
@@ -217,6 +222,29 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
             let before = params.get("before").and_then(Value::as_i64);
             Ok(Value::Array(store().messages(chat, before, limit(params, 50)).map_err(internal)?))
         }
+        "presence.get" => Ok(json!({"state": daemon.presence()})),
+        "presence.set" => {
+            let state = str_param(params, "state")?;
+            if !["available", "away", "busy", "offline"].contains(&state) {
+                return Err(ErrorBody::new("invalid", "state is available, away, busy or offline"));
+            }
+            daemon.set_presence(state).await;
+            Ok(json!({"state": state}))
+        }
+        "chat.media" => {
+            let chat = int_param(params, "chat")?;
+            Ok(Value::Array(store().media_messages(chat, limit(params, 200)).map_err(internal)?))
+        }
+        "chat.mute" => {
+            // until: 0 = unmute, -1 = always, otherwise a time in ms
+            let chat = int_param(params, "chat")?;
+            let until = params.get("until").and_then(Value::as_i64).unwrap_or(0);
+            store().mute(chat, until).map_err(internal)?;
+            daemon.chat_changed(chat);
+            daemon.refresh_alerts();
+            Ok(json!({}))
+        }
+        "avatar.fetch" => avatar(daemon, params).await,
         "send" => {
             let chat = int_param(params, "chat")?;
             let reply_to = params.get("reply_to").and_then(Value::as_str).map(str::to_owned);
@@ -390,48 +418,111 @@ fn outgoing_media(daemon: &Arc<Daemon>, chat: i64, params: &Map<String, Value>) 
 }
 
 /// `media.fetch {message}`: the local file of a message's media, downloaded through the connector the first time.
-async fn fetch_media(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
-    let mut result = fetch_file(daemon, params).await?;
-    // A video gets a still picture (first seconds) for the bubble; mpv draws it, nothing is done without mpv
-    let id = int_param(params, "message")?;
-    let is_video = daemon
-        .store
-        .lock()
-        .unwrap()
-        .message_view(id)
-        .ok()
-        .flatten()
-        .and_then(|v| v.get("media").and_then(|m| m.get("kind")).and_then(Value::as_str).map(|k| k == "video"))
-        .unwrap_or(false);
-    if is_video
-        && let Some(path) = result.get("path").and_then(Value::as_str)
-        && let Some(thumb) = video_thumb(path).await
-    {
-        result["thumb"] = json!(thumb);
+/// The profile picture of a conversation, kept in `avatars/<account>/` (a week; "none" markers a day).
+async fn avatar(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    let chat = int_param(params, "chat")?;
+    let found = daemon.store.lock().unwrap().chat_ref(chat).map_err(internal)?;
+    let Some((account, native, _)) = found else { return Err(ErrorBody::new("not_found", "no such conversation")) };
+    let dir = paths::data_dir().join("avatars").join(&account);
+    paths::private_dir(&dir).map_err(|e| ErrorBody::new("failed", format!("cannot create {}: {e}", dir.display())))?;
+    let file = dir.join(format!("{chat}.jpg"));
+    let none = dir.join(format!("{chat}.none"));
+    let age = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+    if age(&file).is_some_and(|a| a < Duration::from_secs(7 * 86400)) {
+        return Ok(json!({"path": file.display().to_string()}));
     }
-    Ok(result)
+    if age(&none).is_some_and(|a| a < Duration::from_secs(86400)) {
+        return Err(ErrorBody::new("not_found", "no profile picture"));
+    }
+    let conn = daemon.connector(&account).ok_or_else(|| ErrorBody::new("not_connected", "the account is not running"))?;
+    let _slot = daemon.avatars.acquire().await;
+    let mut args = Map::new();
+    args.insert("chat".into(), json!(native));
+    args.insert("dest".into(), json!(file.display().to_string()));
+    match conn.command("avatar", args, Duration::from_secs(30)).await {
+        Ok(_) => Ok(json!({"path": file.display().to_string()})),
+        Err(e) => {
+            if e.code == "not_found" {
+                let _ = std::fs::write(&none, b"");
+                let _ = std::fs::remove_file(&file);
+            }
+            Err(e)
+        }
+    }
 }
 
-/// `<video>.thumb.jpg`, made once with mpv (first frame after a short seek).
-async fn video_thumb(video: &str) -> Option<String> {
-    let thumb = format!("{video}.thumb.jpg");
-    if std::path::Path::new(&thumb).is_file() {
-        return Some(thumb);
+async fn fetch_media(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    fetch_file(daemon, params).await
+}
+
+/// Where a player can read the file of a message now: the saved copy, or a local streaming address of the connector.
+async fn media_source(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    let id = int_param(params, "message")?;
+    let (view, found) = {
+        let store = daemon.store.lock().unwrap();
+        (store.message_view(id).map_err(internal)?, store.message_ref(id).map_err(internal)?)
+    };
+    let media = view.as_ref().and_then(|v| v.get("media")).filter(|m| m.is_object()).cloned();
+    let Some(media) = media else { return Err(ErrorBody::new("not_found", "this message has no file")) };
+    if let Some(path) = media.get("path").and_then(Value::as_str)
+        && std::path::Path::new(path).is_file()
+    {
+        return Ok(json!({"path": path}));
     }
-    let dir = format!("{video}.thumb.d");
+    let Some((account, chat, native)) = found else { return Err(ErrorBody::new("not_found", "no such message")) };
+    let saved = paths::media_dir(&account).join("in");
+    let name = media.get("name").and_then(Value::as_str).unwrap_or("");
+    if !name.is_empty() {
+        let file = saved.join(format!("{id}-{}", name.replace('/', "_")));
+        if file.is_file() {
+            return Ok(json!({"path": file.display().to_string()}));
+        }
+    }
+    let conn = daemon.connector(&account).ok_or_else(|| ErrorBody::new("not_connected", "the account is not running"))?;
+    let mut args = Map::new();
+    args.insert("chat".into(), json!(chat));
+    args.insert("message".into(), json!(native));
+    args.insert("ref".into(), media.get("ref").cloned().unwrap_or(json!(native)));
+    conn.command("stream", args, Duration::from_secs(30)).await
+}
+
+/// A still picture of a video for the conversation, made by mpv from the streamed file (nothing is downloaded).
+async fn media_thumb(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    let id = int_param(params, "message")?;
+    let account = daemon.store.lock().unwrap().message_ref(id).map_err(internal)?.map(|(a, _, _)| a);
+    let Some(account) = account else { return Err(ErrorBody::new("not_found", "no such message")) };
+    let dir = paths::media_dir(&account).join("thumbs");
+    paths::private_dir(&dir).map_err(|e| ErrorBody::new("failed", format!("cannot create {}: {e}", dir.display())))?;
+    let thumb = dir.join(format!("{id}.jpg"));
+    if thumb.is_file() {
+        return Ok(json!({"path": thumb.display().to_string()}));
+    }
+    let source = media_source(daemon, params).await?;
+    let src = source.get("path").or_else(|| source.get("url")).and_then(Value::as_str).unwrap_or("").to_string();
+    if src.is_empty() {
+        return Err(ErrorBody::new("failed", "no source"));
+    }
+    video_thumb(&src, &thumb).await.ok_or_else(|| ErrorBody::new("failed", "no picture could be made"))?;
+    Ok(json!({"path": thumb.display().to_string()}))
+}
+
+/// The first frame after a short seek, drawn by mpv (a file or a local address); nothing is done without mpv.
+async fn video_thumb(src: &str, thumb: &std::path::Path) -> Option<()> {
+    let dir = thumb.with_extension("d");
     std::fs::create_dir_all(&dir).ok()?;
     let run = tokio::process::Command::new("mpv")
         .args(["--no-config", "--no-audio", "--really-quiet", "--frames=1", "--start=0.5", "--vo=image", "--vo-image-format=jpg"])
-        .arg(format!("--vo-image-outdir={dir}"))
-        .arg(video)
+        .arg(format!("--vo-image-outdir={}", dir.display()))
+        .arg("--")
+        .arg(src)
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true)
         .status();
-    let _ = tokio::time::timeout(Duration::from_secs(20), run).await;
+    let _ = tokio::time::timeout(Duration::from_secs(30), run).await;
     let made = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == "jpg"));
-    let ok = made.and_then(|f| std::fs::rename(f, &thumb).ok()).is_some();
+    let ok = made.and_then(|f| std::fs::rename(f, thumb).ok()).is_some();
     let _ = std::fs::remove_dir_all(&dir);
-    ok.then_some(thumb)
+    ok.then_some(())
 }
 
 async fn fetch_file(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {

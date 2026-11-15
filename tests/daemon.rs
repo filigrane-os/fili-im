@@ -235,6 +235,18 @@ fn daemon_end_to_end() {
     assert_eq!(hits.as_array().unwrap().len(), 1);
     assert_eq!(hits[0]["chat_title"], "Family");
 
+    // Presence, shared files and profile pictures.
+    assert_eq!(c.call("presence.get", json!({}))["state"], "away");
+    assert_eq!(c.try_call("presence.set", json!({"state": "dnd"}))["error"]["code"], "invalid");
+    c.call("presence.set", json!({"state": "busy"}));
+    assert_eq!(c.call("presence.get", json!({}))["state"], "busy");
+    assert_eq!(c.try_call("avatar.fetch", json!({"chat": paul}))["error"]["code"], "not_found");
+    assert_eq!(c.call("chat.media", json!({"chat": paul})), json!([]));
+    c.call("presence.set", json!({"state": "offline"}));
+    c.until("accounts.list", json!({}), |a| a[0]["state"] == "offline");
+    c.call("presence.set", json!({"state": "away"}));
+    c.until("accounts.list", json!({}), |a| a[0]["state"] == "connected");
+
     // Restart: data stays, the account reconnects without pairing.
     daemon.stop(&mut c);
     let daemon = world.daemon();

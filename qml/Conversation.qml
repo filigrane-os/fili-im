@@ -84,10 +84,38 @@ Rectangle {
         color: FiliTheme.muted
     }
 
+    // Who it is: picture and name, a click opens the contact card
+    Rectangle {
+        id: head
+        visible: win.current !== 0 && view.chat !== null
+        anchors { top: parent.top; left: parent.left; right: parent.right }
+        height: visible ? 48 : 0
+        color: FiliTheme.background
+        Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
+        Avatar {
+            id: headAvatar
+            anchors { left: parent.left; leftMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            size: 34
+            chatId: view.chat ? view.chat.id : 0
+            title: view.chat ? view.chat.title : ""
+        }
+        Text {
+            anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            text: view.chat ? view.chat.title : ""
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.size + 1
+            font.weight: FiliTheme.weightAccent
+            color: FiliTheme.text
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.chat) win.showContact(view.chat) }
+    }
+
     ListView {
         id: list_
         visible: win.current !== 0
-        anchors { top: parent.top; left: parent.left; right: parent.right; bottom: composer.top }
+        anchors { top: head.bottom; left: parent.left; right: parent.right; bottom: composer.top }
         clip: true
         model: view.messages
         boundsBehavior: Flickable.StopAtBounds
@@ -134,7 +162,7 @@ Rectangle {
                 }
                 onRetry: win.rpc("message.retry", { message: item.modelData.id })
             }
-            // Actions shown while the pointer is over the message, beside the bubble (towards the middle of the view)
+            // Actions shown while the pointer is over the message, on its bubble
             HoverHandler { id: hover }
             Rectangle {
                 id: tools
@@ -147,8 +175,10 @@ Rectangle {
                 color: FiliTheme.surface
                 border.width: FiliTheme.borderWidth
                 border.color: FiliTheme.border
-                y: bubble.y + 2
-                x: m.from_me ? bubble.x - width - FiliTheme.space1 : bubble.x + bubble.width + FiliTheme.space1
+                // On the bubble itself, from its outer corner inwards, so it stays in the window whatever its width
+                y: bubble.y + 3
+                x: m.from_me ? bubble.x + bubble.width - width - 4 : bubble.x + 4
+                z: 5
                 HoverHandler { id: toolsHover }
                 Row {
                     id: toolsRow

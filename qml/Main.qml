@@ -69,6 +69,28 @@ ApplicationWindow {
         if (m.media) rpc("media.fetch", { message: m.id }, r => send({ path: r.path }));
         else send(undefined);
     }
+    // Presence: available (shown online), away (the default: connected, not shown online), busy (no notification
+    // pop-ups), offline (the accounts disconnect)
+    property string presence: "away"
+    readonly property var presences: ["available", "away", "busy", "offline"]
+    function presenceLabel(s) {
+        return { available: Conversations.tr("Online"), away: Conversations.tr("Away"), busy: Conversations.tr("Busy"), offline: Conversations.tr("Offline") }[s] || s;
+    }
+    function presenceColor(s) {
+        return { available: FiliTheme.accentColor, away: FiliTheme.warning, busy: FiliTheme.danger, offline: FiliTheme.muted }[s] || FiliTheme.muted;
+    }
+    function openStatusMenu(x, y) {
+        statusMenu.openAt(x, y, presences.map(s => ({ id: s, label: (s === presence ? "● " : "○ ") + presenceLabel(s) })));
+    }
+    // Profile pictures: asked once per conversation, a few at a time by the daemon
+    property var avatars: ({})
+    property var avatarAsked: ({})
+    function wantAvatar(id) {
+        if (avatarAsked[id]) return;
+        avatarAsked[id] = true;
+        rpc("avatar.fetch", { chat: id }, r => { const a = Object.assign({}, avatars); a[id] = r.path; avatars = a; }, e => { if (e && e.code === "not_connected") delete avatarAsked[id]; });
+    }
+    function showContact(chat) { contactCard.show(chat); }
     // Quick Look on the media of the open conversation
     function quickLook(id) { quickLookCard.open(conversation.messages, id); }
     // React with an emoji of the full list
@@ -102,6 +124,7 @@ ApplicationWindow {
     function reload() {
         rpc("accounts.list", {}, list => { accounts = list; });
         rpc("chats.list", { limit: 500 }, list => { chats = list; });
+        rpc("presence.get", {}, r => { presence = r.state; });
         if (current) conversation.load();
     }
     function upsert(list, item, key) {
@@ -117,6 +140,8 @@ ApplicationWindow {
             chats = copy;
         } else if (e.event === "message") {
             if (e.message.chat === current) conversation.apply(e.message);
+        } else if (e.event === "presence") {
+            presence = e.state;
         } else if (e.event === "account") {
             accounts = upsert(accounts, e.account, "key");
         } else if (e.event === "account.removed") {
@@ -368,6 +393,8 @@ ApplicationWindow {
     AboutCard { id: aboutCard; anchors.fill: parent }
     ShortcutsCard { id: shortcutsCard; anchors.fill: parent }
     SwitchCard { id: switchCard; anchors.fill: parent; onForwardTo: (m, chat) => win.sendForward(m, chat) }
+    ContactCard { id: contactCard; anchors.fill: parent }
     QuickLook { id: quickLookCard; anchors.fill: parent }
+    PopupMenu { id: statusMenu; anchors.fill: parent; onActivated: id => win.rpc("presence.set", { state: id }) }
     EmojiPicker { id: emojiPicker; anchors.fill: parent; onPicked: e => { if (win.emojiTarget) win.rpc("react", { message: win.emojiTarget.id, emoji: e }); } }
 }

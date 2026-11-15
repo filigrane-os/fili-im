@@ -54,6 +54,9 @@ fn capabilities() -> Capabilities {
         chat_kinds: vec!["direct".into(), "group".into()],
         formatting: Formatting::Spans,
         identity: Identity { phone: true },
+        presence: true,
+        avatars: true,
+        streaming: false,
     }
 }
 
@@ -180,6 +183,11 @@ impl Fake {
                 self.reply_later(chat, text.plain);
                 Ok(json!({"id": id, "timestamp": now()}))
             }
+            "presence" => {
+                need_connected()?;
+                Ok(json!({}))
+            }
+            "avatar" => Err(("not_found", "no profile picture".into())),
             "edit" | "delete" | "react" | "mark_read" | "typing" | "chat.mute" | "chat.archive" => {
                 need_connected()?;
                 known_chat(&s("chat"))?;

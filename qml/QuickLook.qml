@@ -14,13 +14,15 @@ Rectangle {
 
     property var items: []
     property int index: 0
-    property var paths: ({})
+    property var paths: ({})     // saved copies (pictures, documents)
+    property var streams: ({})   // local streaming addresses (video, audio): played without a download
     property var failed: ({})
     property var inflight: ({})
     readonly property var current: items.length > 0 ? items[index] : null
     // An item: {id (message), m (message), kind (image, video, audio, file, ... or "youtube" / "videourl" for a link), media, url}
     readonly property string kind: current ? current.kind : ""
-    readonly property string path: current ? (current.kind === "videourl" ? current.url : (paths[current.id] || "")) : ""
+    readonly property string path: current ? (current.kind === "videourl" ? current.url : (paths[current.id] || streams[current.id] || "")) : ""
+    readonly property bool remote: path.indexOf("http") === 0
     readonly property bool isYoutube: kind === "youtube"
     property var titles: ({})
     readonly property bool isPicture: kind === "image" || kind === "sticker"
@@ -65,7 +67,9 @@ Rectangle {
             if (k < 0 || k >= items.length) continue;
             const m = items[k];
             if (!m.media) { loadTitle(m); continue; }
-            if (paths[m.id] || failed[m.id] || (k !== i && (m.media.size || 0) > 30000000)) continue;
+            if (paths[m.id] || streams[m.id] || failed[m.id]) continue;
+            if (m.kind === "video" || m.kind === "audio" || m.kind === "voice") { if (k === i) stream(m); continue; }
+            if (k !== i && (m.media.size || 0) > 30000000) continue;
             fetch(m);
         }
     }
@@ -83,6 +87,27 @@ Rectangle {
     function playLink() {
         if (!current || !current.url) return;
         if (!Conversations.playLink(current.url)) Conversations.openUrl(current.url);
+    }
+    // Video and audio: the connector serves them over local HTTP, the player reads what it needs (or a saved copy)
+    function stream(m) {
+        if (inflight["s" + m.id]) return;
+        inflight["s" + m.id] = true;
+        win.rpc("media.stream", { message: m.id }, r => {
+            if (r.path) { const p = Object.assign({}, paths); p[m.id] = r.path; paths = p; }
+            else { const s = Object.assign({}, streams); s[m.id] = r.url; streams = s; }
+        }, e => {
+            // Cannot be streamed (no address, expired link): save it, then play the copy
+            inflight["s" + m.id] = false;
+            fetch(m);
+        });
+    }
+    // A saved copy for the default application
+    function openWithApp() {
+        if (!current) return;
+        if (current.url) { Conversations.openUrl(current.url); return; }
+        const m = current;
+        if (paths[m.id]) { Conversations.openUrl("file://" + encodeURI(paths[m.id])); return; }
+        win.rpc("media.fetch", { message: m.id }, r => Conversations.openUrl("file://" + encodeURI(r.path)));
     }
     function fetch(m) {
         if (inflight[m.id]) return;
@@ -108,7 +133,7 @@ Rectangle {
     }
     onPathChanged: {
         player.stop();
-        player.source = playable && path !== "" ? (kind === "videourl" ? path : "file://" + encodeURI(path)) : "";
+        player.source = playable && path !== "" ? (remote ? path : "file://" + encodeURI(path)) : "";
         if (playable && path !== "" && visible) player.play();
     }
     onKindChanged: if (!playable) player.source = ""
@@ -154,7 +179,7 @@ Rectangle {
                 color: FiliTheme.muted
             }
             IconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current.m; ql.close(); win.forwardMessage(m); } }
-            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isYoutube; onClicked: Conversations.openUrl(ql.current.url ? ql.current.url : "file://" + encodeURI(ql.path)) }
+            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isYoutube; onClicked: ql.openWithApp() }
             IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: ql.close() }
         }
     }
@@ -209,7 +234,7 @@ Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: !ql.isAudio && ql.path !== ""
                 label: Conversations.tr("Open")
-                onClicked: Conversations.openUrl("file://" + encodeURI(ql.path))
+                onClicked: ql.openWithApp()
             }
         }
         // YouTube link: thumbnail and title; Space or the button plays it in mpv (a web player would need a browser engine)

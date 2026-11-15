@@ -73,6 +73,12 @@ pub struct Capabilities {
     pub chat_kinds: Vec<String>,
     pub formatting: Formatting,
     pub identity: Identity,
+    /// `presence` (online / not) can be sent.
+    pub presence: bool,
+    /// `avatar` fetches profile pictures.
+    pub avatars: bool,
+    /// `stream` serves a received video or audio over local HTTP (ranges), without downloading it first.
+    pub streaming: bool,
 }
 
 impl Default for Capabilities {
@@ -93,6 +99,9 @@ impl Default for Capabilities {
             chat_kinds: vec!["direct".into()],
             formatting: Formatting::Plain,
             identity: Identity::default(),
+            presence: false,
+            avatars: false,
+            streaming: false,
         }
     }
 }
@@ -171,6 +180,9 @@ impl Capabilities {
             "react" if self.reactions == Reactions::None => refuse("reacting"),
             "mark_read" if !self.receipts.send => refuse("read receipts"),
             "typing" if !self.typing.send => refuse("typing indicators"),
+            "presence" if !self.presence => refuse("presence"),
+            "stream" if !self.streaming => refuse("streaming"),
+            "avatar" if !self.avatars => refuse("profile pictures"),
             "backfill" if self.history != History::OnDemand => refuse("loading older messages"),
             _ => Ok(()),
         }
@@ -268,6 +280,8 @@ pub enum ConnState {
     Banned,
     PhoneOffline,
     Error,
+    /// Set by the daemon when the user chooses to be offline: the connector is stopped.
+    Offline,
 }
 
 impl ConnState {
@@ -280,6 +294,7 @@ impl ConnState {
             ConnState::Banned => "banned",
             ConnState::PhoneOffline => "phone_offline",
             ConnState::Error => "error",
+            ConnState::Offline => "offline",
         }
     }
 }

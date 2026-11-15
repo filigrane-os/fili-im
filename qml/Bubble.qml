@@ -34,6 +34,29 @@ Rectangle {
     readonly property bool previewsOn: Conversations.linkPreviews()
     readonly property bool card: ytId !== "" && previewsOn && !message.deleted
     property string ytTitle: ""
+    // What the file is, under it: type, format, size
+    function formatOf(m) {
+        const mime = (m.mime || "").split(";")[0];
+        const ext = (m.name || "").indexOf(".") >= 0 ? m.name.split(".").pop() : "";
+        let f = (ext || (mime.indexOf("/") > 0 ? mime.split("/")[1] : "")).toUpperCase();
+        return ({ "X-MATROSKA": "MKV", "QUICKTIME": "MOV", "X-M4A": "M4A", "MPEG": "MP3", "VND.OPENXMLFORMATS-OFFICEDOCUMENT.WORDPROCESSINGML.DOCUMENT": "DOCX" })[f] || f;
+    }
+    readonly property string mediaInfo: {
+        if (!hasMedia) return "";
+        const m = message.media;
+        const fmt = formatOf(m);
+        const gif = fmt === "GIF";
+        const words = { image: "Image", video: "Video", audio: "Audio", voice: "Voice message", file: "Document", document: "Document", sticker: "Sticker" };
+        const kind = gif ? "GIF" : (words[m.kind] ? Conversations.tr(words[m.kind]) : m.kind);
+        return [kind, fmt !== kind.toUpperCase() ? fmt : "", sizeText(m.size)].filter(x => x !== "").join(" · ");
+    }
+    readonly property string linkSource: {
+        if (card) return "YouTube";
+        if (!videoLink) return "";
+        const m = /^https?:\/\/([^\/?#]+)/.exec(linkUrl);
+        const ext = (/\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i.exec(linkUrl) || [])[1];
+        return [Conversations.tr("Video link"), ext ? ext.toUpperCase() : "", m ? m[1] : ""].filter(x => x !== "").join(" · ");
+    }
     readonly property real pictureWidth: Math.min(280, b.inner)
     property string mediaPath: ""
     property bool fetching: false
@@ -58,7 +81,9 @@ Rectangle {
         return (n / 1048576).toFixed(1) + " MB";
     }
     Component.onCompleted: {
-        if ((isPicture && (message.media.size || 0) < 15000000) || (isVideo && (message.media.size || 0) < 25000000)) fetchMedia(false);
+        if (isPicture && (message.media.size || 0) < 15000000) fetchMedia(false);
+        // A video shows a still picture made from its stream: nothing is downloaded for it
+        if (isVideo) win.rpc("media.thumb", { message: message.id }, r => { thumbPath = r.path; }, () => { });
         if (card) {
             const x = new XMLHttpRequest();
             x.onreadystatechange = () => {
@@ -163,6 +188,16 @@ Rectangle {
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
+        Text {
+            visible: b.showsPicture && b.mediaInfo !== ""
+            width: parent.width
+            text: b.mediaInfo
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.sizeSmall
+            color: FiliTheme.muted
+        }
         // Video, document, voice message: a chip (click downloads and opens it)
         Rectangle {
             id: chip
@@ -191,7 +226,7 @@ Rectangle {
                 }
                 Text {
                     width: parent.width
-                    text: b.fetching ? Conversations.tr("Downloading…") : b.sizeText(b.hasMedia ? b.message.media.size : 0)
+                    text: b.fetching ? Conversations.tr("Downloading…") : b.mediaInfo
                     elide: Text.ElideRight
                     font.family: FiliTheme.font
                     font.pixelSize: FiliTheme.sizeSmall
@@ -239,13 +274,22 @@ Rectangle {
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
+        Text {
+            visible: b.card
+            width: parent.width
+            text: b.linkSource
+            elide: Text.ElideRight
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.sizeSmall
+            color: FiliTheme.muted
+        }
         Rectangle {
             visible: b.videoLink
             width: parent.width
             height: visible ? 32 : 0
             radius: FiliTheme.radiusControl
             color: FiliTheme.alpha(FiliTheme.background, 0.4)
-            Text { anchors { left: parent.left; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter } text: "▶  " + Conversations.tr("Video link"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.accentColor }
+            Text { anchors { left: parent.left; leftMargin: FiliTheme.space2; right: parent.right; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter } elide: Text.ElideRight; text: "▶  " + b.linkSource; font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.accentColor }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         TextEdit {

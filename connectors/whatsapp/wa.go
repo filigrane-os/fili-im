@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -36,6 +37,7 @@ type Connector struct {
 	log       waLog.Logger
 	container *sqlstore.Container
 	local     *Local
+	streams   streamer
 
 	// Users already announced to the daemon with their phone number (and push name), so unknown numbers get a title.
 	announced sync.Map
@@ -488,7 +490,7 @@ func (c *Connector) Run(cmd *Command) (any, error) {
 		return nil, c.pair(cmd.Method, cmd.Phone)
 	case "logout":
 		return nil, c.logout(ctx)
-	case "shutdown", "chat.archive", "chat.mute", "send", "edit", "delete", "react", "mark_read", "typing", "fetch_media":
+	case "shutdown", "chat.archive", "chat.mute", "send", "edit", "delete", "react", "mark_read", "typing", "fetch_media", "avatar", "presence", "stream":
 	default:
 		return nil, fail("unsupported", "unknown command %q", cmd.Cmd)
 	}
@@ -499,8 +501,18 @@ func (c *Connector) Run(cmd *Command) (any, error) {
 	if cli.Store.ID == nil {
 		return nil, fail("not_connected", "not paired")
 	}
-	if cmd.Cmd != "fetch_media" && !cli.IsConnected() {
+	if cmd.Cmd != "fetch_media" && cmd.Cmd != "stream" && !cli.IsConnected() {
 		return nil, fail("not_connected", "not connected to WhatsApp")
+	}
+	if cmd.Cmd == "presence" {
+		state := types.PresenceUnavailable
+		if cmd.State == "available" {
+			state = types.PresenceAvailable
+		}
+		if err := cli.SendPresence(ctx, state); err != nil {
+			return nil, sendError(err)
+		}
+		return nil, nil
 	}
 	chat, err := types.ParseJID(cmd.Chat)
 	if err != nil || cmd.Chat == "" {
@@ -584,6 +596,10 @@ func (c *Connector) Run(cmd *Command) (any, error) {
 		return nil, cli.SendAppState(ctx, appstate.BuildArchive(chat, cmd.Archived, time.UnixMilli(k.Timestamp), key))
 	case "fetch_media":
 		return c.fetchMedia(ctx, cli, chat, cmd)
+	case "avatar":
+		return c.avatar(ctx, cli, chat, cmd)
+	case "stream":
+		return c.stream(ctx, chat.String(), cmd)
 	}
 	return nil, fail("unsupported", "unknown command %q", cmd.Cmd)
 }
@@ -670,6 +686,40 @@ func (c *Connector) markRead(ctx context.Context, cli *whatsmeow.Client, chat ty
 		sender, _ = types.ParseJID(cmd.Sender)
 	}
 	return cli.MarkRead(ctx, cmd.Messages, time.Now(), target, sender)
+}
+
+// avatar saves the small profile picture of a contact or a group to cmd.Dest. Hidden or missing pictures are not_found.
+func (c *Connector) avatar(ctx context.Context, cli *whatsmeow.Client, chat types.JID, cmd *Command) (any, error) {
+	if cmd.Dest == "" {
+		return nil, fail("invalid", "missing dest")
+	}
+	info, err := cli.GetProfilePictureInfo(ctx, chat, &whatsmeow.GetProfilePictureParams{Preview: true})
+	if errors.Is(err, whatsmeow.ErrProfilePictureNotSet) || errors.Is(err, whatsmeow.ErrProfilePictureUnauthorized) || (err == nil && info == nil) {
+		return nil, fail("not_found", "no profile picture")
+	}
+	if err != nil {
+		return nil, sendError(err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.URL, nil)
+	if err != nil {
+		return nil, fail("failed", "bad picture address")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fail("failed", "picture download failed")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fail("failed", "picture download failed with status code %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, fail("failed", "picture download failed")
+	}
+	if err := os.WriteFile(cmd.Dest, data, 0o600); err != nil {
+		return nil, fail("failed", "cannot write the picture: %v", err)
+	}
+	return nil, nil
 }
 
 func (c *Connector) fetchMedia(ctx context.Context, cli *whatsmeow.Client, chat types.JID, cmd *Command) (any, error) {

@@ -86,6 +86,7 @@ type Command struct {
 	Until    int64           `json:"until"`
 	Archived bool            `json:"archived"`
 	Media    json.RawMessage `json:"media"`
+	State    string          `json:"state"`
 }
 
 // Out writes protocol lines; safe from any goroutine (whatsmeow's handlers, command goroutines).
@@ -153,5 +154,8 @@ func capabilities() map[string]any {
 		"chat_kinds":      []string{"direct", "group"},
 		"formatting":      "spans",
 		"identity":        map[string]any{"phone": true},
+		"presence":        true,
+		"avatars":         true,
+		"streaming":       true,
 	}
 }

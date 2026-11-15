@@ -12,7 +12,7 @@ Rectangle {
         const words = {
             connected: Conversations.tr("connected"), connecting: Conversations.tr("connecting"),
             needs_pairing: Conversations.tr("needs pairing"), logged_out: Conversations.tr("signed out"),
-            banned: Conversations.tr("blocked"), phone_offline: Conversations.tr("phone offline"), error: Conversations.tr("error")
+            banned: Conversations.tr("blocked"), phone_offline: Conversations.tr("phone offline"), error: Conversations.tr("error"), offline: Conversations.tr("offline")
         };
         return words[a.state] || a.state;
     }
@@ -85,7 +85,7 @@ Rectangle {
 
     Flickable {
         id: flick
-        anchors { top: parent.top; topMargin: FiliTheme.space3 - FiliTheme.space4; left: parent.left; right: parent.right; bottom: addAccount.top }
+        anchors { top: parent.top; topMargin: FiliTheme.space3 - FiliTheme.space4; left: parent.left; right: parent.right; bottom: statusRow.top }
         clip: true
         contentHeight: column.height
         boundsBehavior: Flickable.StopAtBounds
@@ -122,6 +122,36 @@ Rectangle {
     }
     FiliScrollBar { flick: flick; anchors { top: flick.top; bottom: flick.bottom; right: flick.right } }
 
+    // Presence of the user: a click opens the four choices
+    Rectangle {
+        id: statusRow
+        anchors { left: parent.left; right: parent.right; bottom: addAccount.top }
+        width: side.width - FiliTheme.borderWidth
+        height: FiliTheme.sideRowHeight
+        color: statusArea.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.5) : "transparent"
+        Rectangle {
+            id: dot
+            anchors { left: parent.left; leftMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            width: 10
+            height: 10
+            radius: 5
+            color: win.presenceColor(win.presence)
+        }
+        Text {
+            anchors { left: dot.right; leftMargin: FiliTheme.space2; right: arrow.left; verticalCenter: parent.verticalCenter }
+            text: win.presenceLabel(win.presence)
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.size
+            color: FiliTheme.text
+        }
+        Text { id: arrow; anchors { right: parent.right; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter } text: "▾"; color: FiliTheme.muted }
+        MouseArea {
+            id: statusArea
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: { const p = statusRow.mapToItem(win, FiliTheme.space3, 0); win.openStatusMenu(p.x, p.y - 4 * 26 - 12); }
+        }
+    }
     Rectangle {
         id: addAccount
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }

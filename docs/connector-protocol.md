@@ -84,7 +84,10 @@ The first line a connector writes is `hello`; the daemon sends nothing before it
    "media_max_bytes": 104857600,
    "chat_kinds": ["direct", "group"],
    "formatting": "spans",
-   "identity": {"phone": true}
+   "identity": {"phone": true},
+   "presence": true,
+   "avatars": true,
+   "streaming": true
  }}
 ```
 
@@ -104,6 +107,9 @@ The first line a connector writes is `hello`; the daemon sends nothing before it
 | `chat_kinds` | `direct`, `group`, `channel`, `space` | `["direct"]` |
 | `formatting` | `plain`, `spans` | `plain` |
 | `identity.phone` | contacts carry phone numbers (used to match people) | `false` |
+| `presence` | the connector accepts `presence` (`state`: `available` shows the user online, `unavailable` not) | `false` |
+| `streaming` | the connector accepts `stream` (`chat`, `message`, `ref`): `{url, mime}`, a local `http://127.0.0.1:…` address that serves the file with range requests, so a player can start and seek without a download | `false` |
+| `avatars` | the connector accepts `avatar` (`chat`, `dest`: saves the small profile picture there, `not_found` when there is none or it is hidden) | `false` |
 
 Capabilities are a ceiling. The daemon refuses a command whose capability is absent before sending it, and the
 interface hides it. The daemon refuses a connector whose `protocol` it does not know.
@@ -200,7 +206,10 @@ Non-fatal, logged and shown in the footer.
 | `react` | `chat`, `message`, `emoji` (empty removes) | `{}` | `reactions` |
 | `mark_read` | `chat`, `messages` (ids), `sender` (groups) | `{}` | `receipts.send` |
 | `typing` | `chat`, `active` | `{}` | `typing.send` |
+| `avatar` | `chat`, `dest` | `{}` (a picture saved at `dest`), or `not_found` | `avatars` |
+| `presence` | `state` (`available`, `unavailable`) | `{}` | `presence` |
 | `fetch_media` | `chat`, `message`, `ref`, `dest` (file path to write) | `{path}` | |
+| `stream` | `chat`, `message`, `ref` | `{url, mime}` | `streaming` |
 | `backfill` | `chat`, `before` (message id), `limit` | `{}` then `history.batch` | `history: on_demand` |
 | `chat.mute` | `chat`, `until` (0, -1, timestamp) | `{}` | |
 | `chat.archive` | `chat`, `archived` | `{}` | |

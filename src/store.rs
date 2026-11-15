@@ -716,6 +716,17 @@ impl Store {
         )
     }
 
+    /// The messages of a conversation that carry a file, newest first.
+    pub fn media_messages(&self, chat: i64, limit: i64) -> Result<Vec<Value>> {
+        let sql = format!(
+            "{} ORDER BY m.ts DESC, m.id DESC LIMIT ?2",
+            Store::message_select("m.chat = ?1 AND m.media IS NOT NULL AND m.deleted = 0")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![chat, limit], Store::message_view_row)?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     pub fn message_view(&self, id: i64) -> Result<Option<Value>> {
         let sql = Store::message_select("m.id = ?1");
         Ok(self.conn.query_row(&sql, [id], Store::message_view_row).optional()?)

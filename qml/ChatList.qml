@@ -41,22 +41,12 @@ Rectangle {
             width: view.width
             height: 56
             color: chat && chat.id === win.current ? FiliTheme.surfaceHover : area.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.5) : "transparent"
-            Rectangle {
+            Avatar {
                 id: mark
                 anchors { left: parent.left; leftMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
-                width: 32
-                height: 32
-                radius: 16
-                color: FiliTheme.surfaceActive
-                Text {
-                    anchors.centerIn: parent
-                    text: (row.hit ? (modelData.chat_title || "?") : modelData.title).trim().charAt(0).toUpperCase()
-                    textFormat: Text.PlainText
-                    font.family: FiliTheme.font
-                    font.pixelSize: FiliTheme.size
-                    font.weight: FiliTheme.weightAccent
-                    color: FiliTheme.textSecondary
-                }
+                size: 36
+                chatId: row.hit ? modelData.chat : modelData.id
+                title: row.hit ? (modelData.chat_title || "?") : modelData.title
             }
             Text {
                 anchors { left: mark.right; leftMargin: FiliTheme.space3; right: when.left; rightMargin: FiliTheme.space2; top: parent.top; topMargin: 10 }

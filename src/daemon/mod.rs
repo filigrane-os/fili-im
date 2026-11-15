@@ -31,6 +31,10 @@ pub struct Daemon {
     alerts: notify::Alerts,
     quit: tokio::sync::Notify,
     debug: bool,
+    /// available | away | busy | offline (kept in the state directory)
+    presence: Mutex<String>,
+    /// Profile pictures are asked two at a time at most.
+    avatars: tokio::sync::Semaphore,
 }
 
 /// One daemon per session: a second one (niri restarted, a manual run) exits quietly. The lock lives as long as the
@@ -43,6 +47,14 @@ fn single_instance() -> Option<std::fs::File> {
     // SAFETY: flock on a descriptor this function owns.
     let locked = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
     locked.then_some(file)
+}
+
+fn load_presence() -> String {
+    let saved = std::fs::read_to_string(paths::state_dir().join("presence")).unwrap_or_default();
+    match saved.trim() {
+        s @ ("available" | "away" | "busy" | "offline") => s.to_string(),
+        _ => "away".to_string(),
+    }
 }
 
 pub fn run() -> i32 {
@@ -73,6 +85,8 @@ pub fn run() -> i32 {
             alerts: notify::Alerts::default(),
             quit: tokio::sync::Notify::new(),
             debug: std::env::var_os("FILI_IM_DEBUG").is_some(),
+            presence: Mutex::new(load_presence()),
+            avatars: tokio::sync::Semaphore::new(2),
         });
         daemon.serve().await
     })
@@ -88,8 +102,12 @@ impl Daemon {
             }
         };
         let accounts = self.store.lock().unwrap().account_keys().unwrap_or_default();
-        for (key, platform) in accounts {
-            self.start(&key, &platform);
+        if self.presence() == "offline" {
+            self.mark_offline(&accounts.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>());
+        } else {
+            for (key, platform) in accounts {
+                self.start(&key, &platform);
+            }
         }
         self.refresh_alerts();
         let server = tokio::spawn(control::accept(self.clone(), listener));
@@ -109,6 +127,54 @@ impl Daemon {
             let _ = tokio::time::timeout(Duration::from_secs(5), r.task).await;
         }
         0
+    }
+
+    pub fn presence(&self) -> String {
+        self.presence.lock().unwrap().clone()
+    }
+
+    fn mark_offline(&self, keys: &[String]) {
+        for key in keys {
+            let done = self.store.lock().unwrap().set_state(key, "offline", Some("You chose to be offline"), None);
+            if done.is_ok() {
+                self.account_changed(key);
+            }
+        }
+    }
+
+    /// Show the user as available (online to their contacts) or not, and stop or restart the connectors for offline.
+    async fn set_presence(self: &Arc<Self>, state: &str) {
+        let old = std::mem::replace(&mut *self.presence.lock().unwrap(), state.to_string());
+        let _ = std::fs::write(paths::state_dir().join("presence"), state);
+        let accounts = self.store.lock().unwrap().account_keys().unwrap_or_default();
+        if state == "offline" {
+            let keys: Vec<String> = accounts.into_iter().map(|(k, _)| k).collect();
+            for key in &keys {
+                self.stop(key).await;
+            }
+            self.mark_offline(&keys);
+        } else if old == "offline" {
+            for (key, platform) in accounts {
+                if self.connector(&key).is_none() {
+                    self.start(&key, &platform);
+                }
+            }
+        } else {
+            let running: Vec<Arc<Connector>> = self.connectors.lock().unwrap().values().map(|r| r.conn.clone()).collect();
+            for conn in running {
+                self.send_presence(&conn).await;
+            }
+        }
+        self.broadcast(json!({"event": "presence", "state": state}));
+    }
+
+    async fn send_presence(&self, conn: &Arc<Connector>) {
+        if !conn.is_connected() {
+            return;
+        }
+        let mut args = serde_json::Map::new();
+        args.insert("state".into(), json!(if self.presence() == "available" { "available" } else { "unavailable" }));
+        let _ = conn.command("presence", args, Duration::from_secs(10)).await;
     }
 
     pub fn debug(&self, message: &str) {
@@ -204,6 +270,8 @@ impl Daemon {
                 conn.set_phase(state);
                 self.account_changed(key);
                 if state == ConnState::Connected {
+                    let (daemon, c) = (self.clone(), conn.clone());
+                    tokio::spawn(async move { daemon.send_presence(&c).await });
                     tokio::spawn(flush(self.clone(), conn.clone()));
                 }
             }
@@ -304,7 +372,7 @@ impl Daemon {
     /// A desktop notification for a new incoming message, unless its chat is muted.
     fn announce(self: &Arc<Self>, chat: i64, message: &crate::protocol::Message) {
         let Ok(Some(view)) = self.store.lock().unwrap().chat(chat) else { return };
-        if view["muted"].as_bool().unwrap_or(false) {
+        if view["muted"].as_bool().unwrap_or(false) || self.presence() == "busy" {
             return;
         }
         let title = view["title"].as_str().unwrap_or("").to_string();
