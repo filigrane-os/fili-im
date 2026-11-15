@@ -44,3 +44,16 @@ Read first: `docs/plan.md` §3, `AGENTS.md`, and Filigrane's `agents/skills/fili
   action NAME`; "About Conversations…" (aka fili-im); "Settings…" opens `~/.config/filigrane/fili-im.toml`.
 - Opening a conversation calls `mark_read` with `receipt: false` for now (the receipt policy is P3).
 - Test it live with the user before tagging anything.
+
+## P2 state (2026-11-15)
+
+The window is built and committed: sidebar (Inbox, Accounts, foldable), conversation list, tabs, conversation view,
+composer (send, reply, edit last message), pairing dialog (QR drawn from `qrRows`), footer, About card. The Rust side is
+in the lib crate (`src/gui/`, behind the `gui` feature: cxx-qt links its objects into every binary of the package, so the
+bridge must live in the lib); `fili-im ctl` commands the window (sockets in `$XDG_RUNTIME_DIR/fili-im/windows/`).
+Seen working on the real account (126 conversations). `check-app-window.py` passes; the fallback menu is in Filigrane.
+
+Not done: live test by the user of opening a conversation / sending / receiving, Settings file (`fili-im.toml` does not
+exist yet: the "Settings…" entry opens a missing file; create it only when there is a real setting), French catalog
+(`i18n/fr.json` is empty), media thumbnails (shown as a labelled chip; the daemon has no `fetch_media` control method
+yet), reactions sending, deployment (`./bootstrap.sh --apps`, pinned in Filigrane `apps/`), a shortcuts card.

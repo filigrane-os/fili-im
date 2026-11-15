@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Conversations
+GenericName=Messaging
+GenericName[fr]=Messagerie
+Comment=Instant messaging (WhatsApp)
+Comment[fr]=Messagerie instantanée (WhatsApp)
+Exec=fili-im
+Icon=fili-im
+Keywords=chat;messaging;whatsapp;im;messages;
+Keywords[fr]=messagerie;discussion;whatsapp;messages;
+Categories=Network;InstantMessaging;
+StartupWMClass=fili-im
+Terminal=false

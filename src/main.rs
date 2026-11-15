@@ -1,5 +1,5 @@
-//! `fili-im`: Conversations. `daemon` runs the daemon; the other subcommands talk to it. Without a subcommand it will
-//! open the window (phase P2); until then it shows the status.
+//! `fili-im`: Conversations. `daemon` runs the daemon; the other subcommands talk to it. Without a subcommand it opens
+//! the window; `ctl` commands an open window (the fili-bar menu).
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fili_im::client::Client;
@@ -70,6 +70,25 @@ enum Cmd {
 }
 
 fn main() {
+    // No argument: the window. `ctl` commands an open window and never starts Qt.
+    #[cfg(feature = "gui")]
+    if std::env::args().skip(1).all(|a| fili_im::window_parts::is_flag(&a)) {
+        if fili_im::ctl::focus_existing() {
+            return;
+        }
+        std::process::exit(fili_im::gui::run());
+    }
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|a| a == "ctl") {
+        match fili_im::ctl::run(&args[2..]) {
+            Ok(answer) => println!("{answer}"),
+            Err(e) => {
+                eprintln!("fili-im ctl: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     let cli = Cli::parse();
     if matches!(cli.command, Some(Cmd::Daemon)) {
         std::process::exit(fili_im::daemon::run());
