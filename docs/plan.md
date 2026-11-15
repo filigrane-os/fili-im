@@ -1,9 +1,9 @@
-# Standard (fili-im): plan
+# Conversations (fili-im): plan
 
-Status: draft, 2026-11-15. Nothing built yet.
+Status: P0 (foundations) done 2026-11-15; next P1 (WhatsApp connector).
 
-Standard is Filigrane's instant messaging application: one place for WhatsApp, then Telegram, Discord, Signal and
-others. Program `fili-im`, display name **Standard** (a telephone switchboard, in the line of Casier, Facteur,
+Conversations is Filigrane's instant messaging application: one place for WhatsApp, then Telegram, Discord, Signal and
+others. Program `fili-im`, display name **Conversations** (plain in French and English, next to Casier, Facteur,
 Aéroport, Cassette). `fili-chat` is already taken by Rob, the AI chat.
 
 It follows Facteur's model: a **daemon** that stays connected and notifies even when the window is closed, a **fili-bar
@@ -82,8 +82,8 @@ suite that runs against every connector and against `fili-im-fake`.
   `message.delete`, `reaction`, `receipt`, `typing`, `history.batch`, `media.ready`, `error`.
 - Daemon → connector commands, each with an id and an `ok`/`error` answer: `pair`, `logout`, `send`, `edit`, `delete`,
   `react`, `mark_read`, `typing`, `fetch_media`, `backfill`, `chat.mute`, `chat.archive`.
-- Ids: account `<platform>:<native id>`, chat `<account>/<native chat id>`, message `<chat>/<native message id>`. The
-  daemon stores native ids opaque; it never parses them.
+- Ids: the daemon names each account `<platform>-<n>` (stable, known before pairing); chats and messages keep their
+  native ids, scoped by account and chat. The daemon stores native ids opaque; it never parses them.
 - Text arrives in a neutral form: plain text plus spans (bold, italic, code, link, mention). The connector converts
   from and to its platform's markup.
 
@@ -128,16 +128,16 @@ Facteur's footer and tabs), checked by `tests/fili-shell/check-app-window.py`.
   the HIG says.
 - `KineticScroll` + `FiliScrollBar` on every scrolling view.
 - Full menu in the fili-bar (fallback `dotfiles/config/filigrane/appmenu/fili-im.json` + `fili-im ctl --pid PID
-  action NAME`), "About Standard…" (aka fili-im), "Settings…" opening `~/.config/filigrane/fili-im.toml`.
+  action NAME`), "About Conversations…" (aka fili-im), "Settings…" opening `~/.config/filigrane/fili-im.toml`.
 - Header and footer follow Settings > Appearance live; nothing only reachable from the header.
 
 ## 4. fili-bar module and notifications
 
 - Module `messages` (`dotfiles/config/quickshell/bar/modules/messages/`): an `AlertModule` (kind `messages`, like
-  `mail`) at first: count of unread conversations, tooltip with the last ones, click opens Standard.
+  `mail`) at first: count of unread conversations, tooltip with the last ones, click opens Conversations.
 - Then its own panel `MessagesPanel.qml`: last conversations, **peek** (read without receipts, 8.1) and **quick
   reply** (8.2) without opening the window, and per-account state.
-- Notifications through `notify-send` (app name Standard, icon fili-im), grouped per conversation, with actions
+- Notifications through `notify-send` (app name Conversations, icon fili-im), grouped per conversation, with actions
   (Open, Reply, Mark read, Mute 1 h). fili-shell's notification centre has no inline reply today: "Reply" opens the
   bar panel on that conversation; inline reply in fili-shell notifications is a separate fili-shell task (P3).
 - Do Not Disturb respected; rules decide what breaks through (8.4).
@@ -185,7 +185,7 @@ model holds. That is the test of the architecture.
   per conversation and say which agent receives what.
 - Security section in every review, as in Facteur (`Security: PASS / BLOCK / NOT VERIFIED`).
 
-## 8. Features that set Standard apart (vision)
+## 8. Features that set Conversations apart (vision)
 
 1. **Peek without receipts.** Policy in the daemon: `read_receipts = "on_open" | "manual" | "never"` per account and
    per conversation. The bar panel and notifications never send them; opening the conversation in the window does
@@ -231,7 +231,7 @@ at the end of a phase when it touches the protocol or the store.
 
 ## 10. Open decisions
 
-- Display name: "Standard" proposed; to confirm.
+- Display name: "Conversations" (chosen 2026-11-15).
 - Telegram library: grammers or TDLib (P5, by measurement).
 - Discord: user-account connector with a warning, bot-only, or not at all (P8).
 - Inline reply in fili-shell notifications: implement in fili-shell (benefits Facteur too) or keep "Reply opens the

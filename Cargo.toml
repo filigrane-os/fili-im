@@ -1,0 +1,25 @@
+[package]
+name = "fili-im"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Conversations: Filigrane's instant messaging (daemon, CLI and connectors)"
+publish = false
+
+[features]
+# The window (Qt Quick, phase P2) will be the default build; `--no-default-features` keeps the daemon, the CLI and the
+# fake connector alone, which is also how the tests link without Qt.
+default = []
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+libc = "0.2"
+rusqlite = { version = "0.38", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "process", "sync", "time", "signal", "fs"] }
+
+[profile.release]
+lto = "thin"
+strip = true
