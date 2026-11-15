@@ -118,8 +118,6 @@ Rectangle {
             size: 34
             chatId: view.person ? view.person.id : 0
             title: view.person ? view.person.title : ""
-            platform: win.multi && !win.grouped ? win.platformOf(view.person) : ""
-            platforms: win.grouped ? win.group.map(c => win.platformOf(c)) : []
             alts: win.groupIds(win.current).filter(x => x !== win.current)
         }
         Column {

@@ -38,6 +38,11 @@ Rectangle {
             required property var modelData
             readonly property bool hit: list.searching
             readonly property var chat: hit ? win.chatById(modelData.chat) : modelData
+            // The chat the last message belongs to (a search hit: the chat of the hit)
+            readonly property string platform: {
+                const m = hit ? modelData : (modelData.last || null);
+                return m ? win.platformOf(win.chatById(hit ? modelData.chat : m.chat)) : (chat ? win.platformOf(chat) : "");
+            }
             width: view.width
             height: 56
             color: chat && chat.id === win.current ? FiliTheme.surfaceHover : area.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.5) : "transparent"
@@ -47,7 +52,6 @@ Rectangle {
                 size: 36
                 chatId: row.hit ? win.canon(modelData.chat) : modelData.id
                 title: row.hit ? (modelData.chat_title || "?") : modelData.title
-                platforms: win.multi && row.chat ? (row.chat.members ? row.chat.members.map(m => win.platformOf(m)) : [win.platformOf(row.chat)]) : []
                 alts: row.chat ? win.groupIds(row.chat.id).filter(x => x !== row.chat.id) : []
             }
             Text {
@@ -68,8 +72,19 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeSmall
                 color: FiliTheme.muted
             }
+            // Which platform the last message went through, just before it
+            Rectangle {
+                id: via
+                visible: win.multi && row.platform !== ""
+                anchors { left: mark.right; leftMargin: FiliTheme.space3; bottom: parent.bottom; bottomMargin: 11 }
+                width: visible ? 14 : 0
+                height: 14
+                radius: 7
+                color: win.platformColor(row.platform)
+                Text { anchors.centerIn: parent; text: win.platformName(row.platform).charAt(0); font.pixelSize: 9; font.bold: true; color: "white" }
+            }
             Text {
-                anchors { left: mark.right; leftMargin: FiliTheme.space3; right: badge.visible ? badge.left : parent.right; rightMargin: FiliTheme.space2; bottom: parent.bottom; bottomMargin: 10 }
+                anchors { left: via.visible ? via.right : mark.right; leftMargin: via.visible ? FiliTheme.space2 : FiliTheme.space3; right: badge.visible ? badge.left : parent.right; rightMargin: FiliTheme.space2; bottom: parent.bottom; bottomMargin: 10 }
                 text: row.hit ? (modelData.snippet || "").replace(/<[^>]*>/g, "") : list.preview(modelData)
                 elide: Text.ElideRight
                 textFormat: Text.PlainText

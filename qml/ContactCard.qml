@@ -9,30 +9,44 @@ Rectangle {
     color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.7)
     focus: visible
 
-    property int chatId: 0
-    readonly property var chat: win.chatById(chatId)
+    // What the card is about follows the view: one platform's conversation, or every conversation of the person
+    property var ids: []
+    readonly property var chats: ids.map(win.chatById).filter(c => c)
+    readonly property var chat: chats.length ? chats[0] : null
+    readonly property bool all: chats.length > 1
     property var media: []
     property string filter: "all"
     readonly property var shown: media.filter(m => filter === "all" || (filter === "visual" ? (m.media.kind === "image" || m.media.kind === "video" || m.media.kind === "sticker") : (m.media.kind !== "image" && m.media.kind !== "video" && m.media.kind !== "sticker")))
-    readonly property var others: win.siblings(chat)
     readonly property bool group: chat ? chat.kind !== "direct" : false
-    readonly property string phone: {
-        if (!chat || group) return "";
-        const m = /^(\d{6,15})@s\.whatsapp\.net$/.exec(chat.native_id);
+    readonly property bool muted: chats.length > 0 && chats.every(c => c.muted)
+    readonly property int unread: chats.reduce((n, c) => n + (c.unread > 0 ? c.unread : 0), 0)
+    function phoneOf(c) {
+        if (!c || c.kind !== "direct") return "";
+        const m = /^(\d{6,15})@s\.whatsapp\.net$/.exec(c.native_id);
         return m ? "+" + m[1] : "";
     }
-    readonly property string accountName: {
-        if (!chat) return "";
-        const a = win.accountByKey(chat.account);
+    function accountNameOf(c) {
+        const a = c ? win.accountByKey(c.account) : null;
         return a ? (a.self_name || a.name) : "";
     }
+    // One platform: its name, number and account; every platform: how many
+    readonly property string subtitle: {
+        if (!chat) return "";
+        if (all) return Conversations.tr("%1 platforms").replace("%1", chats.length);
+        return [group ? Conversations.tr("Group") : phoneOf(chat), win.multi ? win.platformName(win.platformOf(chat)) : "", accountNameOf(chat)].filter(x => x !== "").join(" · ");
+    }
 
-    function show(c) {
-        chatId = c.id;
+    function show() {
+        ids = win.scopeIds();
         media = [];
         filter = "all";
         visible = true;
-        win.rpc("chat.media", { chat: c.id, limit: 300 }, list => { if (card.chatId === c.id) card.media = list; });
+        const mine = ids.slice();
+        let acc = [], waiting = mine.length;
+        mine.forEach(id => win.rpc("chat.media", { chat: id, limit: 300 }, list => {
+            acc = acc.concat(list);
+            if (--waiting === 0 && card.ids.join() === mine.join()) card.media = acc.sort((a, b) => b.timestamp - a.timestamp);
+        }, () => { --waiting; }));
     }
     function openMedia(m) { quickLookCard.open(media.slice().reverse(), m.id); }
     onVisibleChanged: if (visible) forceActiveFocus()
@@ -53,7 +67,7 @@ Rectangle {
             id: head
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space5 }
             spacing: FiliTheme.space2
-            Avatar { anchors.horizontalCenter: parent.horizontalCenter; chatId: card.chat ? card.chat.id : 0; title: card.chat ? card.chat.title : ""; size: 96; platform: win.multi ? win.platformOf(card.chat) : "" }
+            Avatar { anchors.horizontalCenter: parent.horizontalCenter; chatId: card.chat ? card.chat.id : 0; title: card.chat ? card.chat.title : ""; size: 96; alts: card.ids.slice(1) }
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
@@ -68,7 +82,7 @@ Rectangle {
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: [card.group ? Conversations.tr("Group") : card.phone, win.multi ? win.platformName(win.platformOf(card.chat)) : "", card.accountName].filter(x => x !== "").join(" · ")
+                text: card.subtitle
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 font.family: FiliTheme.font
@@ -77,44 +91,78 @@ Rectangle {
             }
             Text {
                 width: parent.width
-                visible: card.chat && card.chat.muted
+                visible: card.muted
                 horizontalAlignment: Text.AlignHCenter
                 text: Conversations.tr("Notifications are muted")
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeSmall
                 color: FiliTheme.muted
             }
-            // The same person on another platform (same name for now): one click to the other conversation
+            // Every platform: one line each (pick one to see its card and its conversation)
+            Column {
+                visible: card.all
+                width: parent.width
+                spacing: 2
+                Repeater {
+                    model: card.all ? card.chats : []
+                    Rectangle {
+                        required property var modelData
+                        width: parent.width
+                        height: 30
+                        radius: FiliTheme.radiusControl
+                        color: lineArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
+                        Rectangle {
+                            id: lineBadge
+                            anchors { left: parent.left; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+                            width: 18; height: 18; radius: 9
+                            color: win.platformColor(win.platformOf(modelData))
+                            Text { anchors.centerIn: parent; text: win.platformName(win.platformOf(modelData)).charAt(0); font.pixelSize: 11; font.bold: true; color: "white" }
+                        }
+                        Text {
+                            anchors { left: lineBadge.right; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+                            text: win.platformName(win.platformOf(modelData))
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.size
+                            color: FiliTheme.text
+                        }
+                        Text {
+                            anchors { right: parent.right; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+                            text: [card.phoneOf(modelData), card.accountNameOf(modelData), modelData.muted ? Conversations.tr("muted") : ""].filter(x => x !== "").join(" · ")
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.sizeList
+                            color: FiliTheme.textSecondary
+                        }
+                        MouseArea { id: lineArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { win.setScope(modelData.id); card.show(); } }
+                    }
+                }
+            }
+            // One platform: the others, to go to
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: FiliTheme.space2
-                visible: card.others.length > 0
+                visible: !card.all && win.grouped
                 Text { anchors.verticalCenter: parent.verticalCenter; text: Conversations.tr("Also on"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.textSecondary }
                 Repeater {
-                    model: card.others
-                    TextButton { required property var modelData; label: win.platformName(win.platformOf(modelData)); onClicked: { card.visible = false; win.openChat(modelData.id); } }
+                    model: win.grouped && !card.all ? win.group.filter(c => card.chat && c.id !== card.chat.id) : []
+                    TextButton { required property var modelData; label: win.platformName(win.platformOf(modelData)); onClicked: { win.setScope(modelData.id); card.show(); } }
                 }
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: FiliTheme.space2
                 TextButton {
-                    label: card.chat && card.chat.muted ? Conversations.tr("Unmute") : Conversations.tr("Mute…")
+                    label: card.muted ? Conversations.tr("Unmute") : Conversations.tr("Mute…")
                     onClicked: {
-                        if (card.chat.muted) win.rpc("chat.mute", { chat: card.chat.id, until: 0 });
+                        if (card.muted) card.chats.forEach(c => win.rpc("chat.mute", { chat: c.id, until: 0 }));
                         else { const p = mapToItem(card, 0, height); muteMenu.openAt(p.x, p.y, [
                             { id: "3600000", label: Conversations.tr("1 hour") }, { id: "28800000", label: Conversations.tr("8 hours") },
                             { id: "604800000", label: Conversations.tr("1 week") }, { id: "-1", label: Conversations.tr("Always") }]); }
                     }
                 }
                 TextButton {
-                    visible: card.chat && card.chat.unread > 0
+                    visible: card.unread > 0
                     label: Conversations.tr("Mark as Read")
-                    onClicked: win.rpc("mark_read", { chat: card.chat.id, receipt: true })
-                }
-                TextButton {
-                    label: Conversations.tr("Open conversation")
-                    onClicked: { card.visible = false; win.openChat(card.chat.id); }
+                    onClicked: card.chats.forEach(c => { if (c.unread > 0) win.rpc("mark_read", { chat: c.id, receipt: true }); })
                 }
             }
             Row {
@@ -197,6 +245,6 @@ Rectangle {
         id: muteMenu
         anchors.fill: parent
         z: 230
-        onActivated: id => win.rpc("chat.mute", { chat: card.chat.id, until: id === "-1" ? -1 : Date.now() + parseInt(id) })
+        onActivated: id => card.chats.forEach(c => win.rpc("chat.mute", { chat: c.id, until: id === "-1" ? -1 : Date.now() + parseInt(id) }))
     }
 }

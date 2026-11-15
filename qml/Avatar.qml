@@ -9,11 +9,7 @@ Item {
     property int chatId: 0
     property string title: ""
     property int size: 32
-    // Platform of the conversation (a small mark in the corner) when several are in use
-    property string platform: ""
-    property var platforms: []         // several: overlapping marks
     property var alts: []              // other conversations of the same person: any picture will do
-    readonly property var marks: platforms.length > 0 ? platforms : (platform !== "" ? [platform] : [])
     readonly property string path: {
         for (const id of [chatId].concat(alts)) if (id && win.avatars[id]) return win.avatars[id];
         return "";
@@ -55,25 +51,6 @@ Item {
         radius: width / 2
         visible: false
         layer.enabled: true
-    }
-    Row {
-        anchors { right: parent.right; bottom: parent.bottom; rightMargin: -2; bottomMargin: -2 }
-        layoutDirection: Qt.RightToLeft
-        spacing: -Math.round(av.size * 0.12)
-        z: 2
-        Repeater {
-            model: av.marks
-            Rectangle {
-                required property string modelData
-                width: Math.max(12, Math.round(av.size * 0.38))
-                height: width
-                radius: width / 2
-                color: win.platformColor(modelData)
-                border.width: 2
-                border.color: FiliTheme.background
-                Text { anchors.centerIn: parent; text: win.platformName(modelData).charAt(0); font.pixelSize: Math.round(parent.width * 0.6); font.bold: true; color: "white" }
-            }
-        }
     }
     MultiEffect {
         anchors.fill: parent

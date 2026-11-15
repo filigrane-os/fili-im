@@ -152,7 +152,7 @@ ApplicationWindow {
         const n = c.title.trim().toLowerCase();
         return chats.filter(x => x.id !== c.id && x.kind === "direct" && x.account !== c.account && x.title.trim().toLowerCase() === n);
     }
-    function showContact(chat) { contactCard.show(chat); }
+    function showContact(chat) { contactCard.show(); }
     // Quick Look on the media of the open conversation
     function quickLook(id) { quickLookCard.open(conversation.messages, id); }
     // React with an emoji of the full list
