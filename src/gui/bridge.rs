@@ -81,6 +81,14 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "qrRows"]
         fn qr_rows(self: &Conversations, text: &QString) -> QString;
+        // Play a video link (YouTube and the sites yt-dlp knows) in mpv; false when mpv is missing
+        #[qinvokable]
+        #[cxx_name = "playLink"]
+        fn play_link(self: &Conversations, url: &QString) -> bool;
+        // [links] previews in fili-im.toml: false = no request is made for a link ("off")
+        #[qinvokable]
+        #[cxx_name = "linkPreviews"]
+        fn link_previews(self: &Conversations) -> bool;
         // Open a file or a link with the desktop (xdg-open)
         #[qinvokable]
         #[cxx_name = "openUrl"]
@@ -228,6 +236,35 @@ impl qobject::Conversations {
 
     pub fn footer(&self) -> bool {
         crate::window_parts::shown_now("footer")
+    }
+
+    pub fn play_link(&self, url: &QString) -> bool {
+        let url = url.to_string();
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            return false;
+        }
+        std::process::Command::new("mpv")
+            .args(["--force-window=yes", "--keep-open=no", "--wayland-app-id=quicklook", "--ytdl-format=bv*[height<=1080]+ba/b"])
+            .arg("--")
+            .arg(&url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .is_ok()
+    }
+
+    pub fn link_previews(&self) -> bool {
+        let text = std::fs::read_to_string(crate::window_parts::config_dir().join("fili-im.toml")).unwrap_or_default();
+        let mut in_links = false;
+        for line in text.lines().map(str::trim) {
+            if line.starts_with('[') {
+                in_links = line.starts_with("[links]");
+            } else if in_links && line.starts_with("previews") {
+                return !line.contains("\"off\"");
+            }
+        }
+        true
     }
 
     pub fn emojis(&self) -> QString {

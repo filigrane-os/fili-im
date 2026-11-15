@@ -391,6 +391,50 @@ fn outgoing_media(daemon: &Arc<Daemon>, chat: i64, params: &Map<String, Value>) 
 
 /// `media.fetch {message}`: the local file of a message's media, downloaded through the connector the first time.
 async fn fetch_media(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    let mut result = fetch_file(daemon, params).await?;
+    // A video gets a still picture (first seconds) for the bubble; mpv draws it, nothing is done without mpv
+    let id = int_param(params, "message")?;
+    let is_video = daemon
+        .store
+        .lock()
+        .unwrap()
+        .message_view(id)
+        .ok()
+        .flatten()
+        .and_then(|v| v.get("media").and_then(|m| m.get("kind")).and_then(Value::as_str).map(|k| k == "video"))
+        .unwrap_or(false);
+    if is_video
+        && let Some(path) = result.get("path").and_then(Value::as_str)
+        && let Some(thumb) = video_thumb(path).await
+    {
+        result["thumb"] = json!(thumb);
+    }
+    Ok(result)
+}
+
+/// `<video>.thumb.jpg`, made once with mpv (first frame after a short seek).
+async fn video_thumb(video: &str) -> Option<String> {
+    let thumb = format!("{video}.thumb.jpg");
+    if std::path::Path::new(&thumb).is_file() {
+        return Some(thumb);
+    }
+    let dir = format!("{video}.thumb.d");
+    std::fs::create_dir_all(&dir).ok()?;
+    let run = tokio::process::Command::new("mpv")
+        .args(["--no-config", "--no-audio", "--really-quiet", "--frames=1", "--start=0.5", "--vo=image", "--vo-image-format=jpg"])
+        .arg(format!("--vo-image-outdir={dir}"))
+        .arg(video)
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .status();
+    let _ = tokio::time::timeout(Duration::from_secs(20), run).await;
+    let made = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == "jpg"));
+    let ok = made.and_then(|f| std::fs::rename(f, &thumb).ok()).is_some();
+    let _ = std::fs::remove_dir_all(&dir);
+    ok.then_some(thumb)
+}
+
+async fn fetch_file(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
     let id = int_param(params, "message")?;
     let (view, found) = {
         let store = daemon.store.lock().unwrap();

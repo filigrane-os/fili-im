@@ -9,12 +9,21 @@ Rectangle {
     property var messages: []
     property bool more: false
     property bool loading: false
+    // Messages received while the view was scrolled up, counted on the "latest messages" button
+    property int unseen: 0
     readonly property var chat: win.chatById(win.current)
     readonly property var caps: win.capsOf(chat)
     readonly property bool group: chat ? chat.kind !== "direct" : false
 
+    function toLatest() {
+        list_.positionViewAtEnd();
+        // The delegates under the end have estimated heights until they are built: settle once they are
+        Qt.callLater(() => list_.positionViewAtEnd());
+        unseen = 0;
+    }
     function load() {
         messages = [];
+        unseen = 0;
         more = false;
         if (!win.current) return;
         const id = win.current;
@@ -48,6 +57,7 @@ Rectangle {
         if (i >= 0) copy[i] = m; else copy.push(m);
         messages = copy;
         if (atEnd) list_.positionViewAtEnd();
+        else if (!m.from_me && i < 0) unseen++;
         if (!m.from_me && i < 0 && win.active) win.rpc("mark_read", { chat: m.chat, receipt: "auto" });
     }
     function byNative(id) { return messages.find(m => m.native_id === id) || null; }
@@ -85,6 +95,7 @@ Rectangle {
         bottomMargin: FiliTheme.space3
         spacing: 2
         KineticScroll {}
+        onAtYEndChanged: if (atYEnd) view.unseen = 0
         header: Item {
             width: list_.width
             height: view.more ? 32 : 0
@@ -181,6 +192,40 @@ Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 2
         color: FiliTheme.accentColor
+    }
+
+    // One click down to the latest message; shown only when the view is not already at the end
+    Rectangle {
+        id: latest
+        readonly property bool shown: win.current !== 0 && !list_.atYEnd && view.messages.length > 0
+        visible: opacity > 0
+        opacity: shown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+        z: 5
+        anchors { right: parent.right; rightMargin: FiliTheme.margin; bottom: composer.top; bottomMargin: FiliTheme.space2 }
+        width: badge.visible ? 28 + badge.width + FiliTheme.space2 : 32
+        height: 32
+        radius: FiliTheme.radiusControl
+        color: FiliTheme.surface
+        border.width: FiliTheme.borderWidth
+        border.color: FiliTheme.border
+        IconButton {
+            anchors { left: parent.left; leftMargin: 2; verticalCenter: parent.verticalCenter }
+            width: 28; height: 28
+            name: "chevron-down"
+            tip: Conversations.tr("Latest messages")
+            onClicked: view.toLatest()
+        }
+        Text {
+            id: badge
+            visible: view.unseen > 0
+            anchors { right: parent.right; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+            text: view.unseen > 99 ? "99+" : view.unseen
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.sizeSmall
+            font.weight: FiliTheme.weightAccent
+            color: FiliTheme.accentColor
+        }
     }
 
     Composer {

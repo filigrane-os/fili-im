@@ -116,6 +116,7 @@
  "Link WhatsApp": "Associer WhatsApp",
  "List": "Liste",
  "Load earlier messages": "Charger les messages précédents",
+ "Latest messages": "Derniers messages",
  "Load pictures (%1)": "Afficher les images (%1)",
  "Loading history…": "Chargement de l’historique…",
  "Loading more…": "Chargement…",
@@ -296,5 +297,7 @@
  "Message forwarded": "Message transféré",
  "More emoji…": "Plus d’émojis…",
  "Search emoji": "Chercher un émoji",
- "Open with the default application": "Ouvrir avec l’application par défaut"
+ "Open with the default application": "Ouvrir avec l’application par défaut",
+ "Video link": "Lien vidéo",
+ "Play": "Lire"
 }

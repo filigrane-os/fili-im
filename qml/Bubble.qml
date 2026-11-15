@@ -24,6 +24,16 @@ Rectangle {
     // Pictures show in the bubble (downloaded when it appears); videos and files download when clicked, then open
     readonly property bool hasMedia: message.media !== null && message.media !== undefined && !message.deleted
     readonly property bool isPicture: hasMedia && (message.media.kind === "image" || message.media.kind === "sticker")
+    readonly property bool isVideo: hasMedia && message.media.kind === "video"
+    property string thumbPath: ""
+    readonly property bool showsPicture: isPicture || (isVideo && thumbPath !== "")
+    // A link in the text: YouTube gets a card (thumbnail and title), a direct video file a chip; both play in Quick Look
+    readonly property string linkUrl: { const m = /https?:\/\/[^\s<>"']+/.exec(b.body); return m ? m[0] : ""; }
+    readonly property string ytId: { const m = /(?:youtube\.com\/(?:watch\?(?:[^\s#]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/.exec(b.linkUrl); return m ? m[1] : ""; }
+    readonly property bool videoLink: ytId === "" && /\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i.test(linkUrl)
+    readonly property bool previewsOn: Conversations.linkPreviews()
+    readonly property bool card: ytId !== "" && previewsOn && !message.deleted
+    property string ytTitle: ""
     readonly property real pictureWidth: Math.min(280, b.inner)
     property string mediaPath: ""
     property bool fetching: false
@@ -34,6 +44,7 @@ Rectangle {
         win.rpc("media.fetch", { message: message.id }, r => {
             fetching = false;
             mediaPath = r.path;
+            thumbPath = r.thumb || "";
             if (thenOpen) Conversations.openUrl("file://" + encodeURI(r.path));
         }, e => {
             fetching = false;
@@ -46,10 +57,21 @@ Rectangle {
         if (n < 1048576) return Math.round(n / 1024) + " KB";
         return (n / 1048576).toFixed(1) + " MB";
     }
-    Component.onCompleted: if (isPicture && (message.media.size || 0) < 15000000) fetchMedia(false)
+    Component.onCompleted: {
+        if ((isPicture && (message.media.size || 0) < 15000000) || (isVideo && (message.media.size || 0) < 25000000)) fetchMedia(false);
+        if (card) {
+            const x = new XMLHttpRequest();
+            x.onreadystatechange = () => {
+                if (x.readyState !== XMLHttpRequest.DONE || x.status !== 200) return;
+                try { b.ytTitle = JSON.parse(x.responseText).title || ""; } catch (e) { }
+            };
+            x.open("GET", "https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + ytId));
+            x.send();
+        }
+    }
 
     // The bubble is as wide as its widest line (text measured unwrapped), up to maxWidth; everything inside follows it
-    readonly property real innerWidth: isPicture ? pictureWidth : b.body.indexOf("\n") >= 0 ? b.inner : Math.min(b.inner, Math.max(probe.width, probeSender.width, b.hasMedia && !b.isPicture ? 200 : 0, foot.implicitWidth, 60) + 2)
+    readonly property real innerWidth: (showsPicture || card) ? pictureWidth : b.body.indexOf("\n") >= 0 ? b.inner : Math.min(b.inner, Math.max(probe.width, probeSender.width, b.hasMedia && !b.showsPicture ? 200 : 0, foot.implicitWidth, 60) + 2)
     width: innerWidth + 2 * FiliTheme.space3
     // The bubble is as wide as its widest single-line text (measured, capped at the maximum); text with line breaks
     // takes the maximum
@@ -106,20 +128,30 @@ Rectangle {
         // Picture: shown once downloaded, a placeholder of the same width before
         Rectangle {
             id: picture
-            visible: b.isPicture
+            visible: b.showsPicture
             width: parent.width
             height: visible ? (image.status === Image.Ready && image.implicitWidth > 0 ? Math.min(360, width * image.implicitHeight / image.implicitWidth) : 120) : 0
             radius: FiliTheme.radiusControl
             color: FiliTheme.backgroundDeep
             clip: true
-            Image {
+            AnimatedImage {
                 id: image
                 anchors.fill: parent
-                source: b.mediaPath !== "" ? "file://" + encodeURI(b.mediaPath) : ""
+                source: b.isVideo ? (b.thumbPath !== "" ? "file://" + encodeURI(b.thumbPath) : "") : b.mediaPath !== "" ? "file://" + encodeURI(b.mediaPath) : ""
                 asynchronous: true
                 cache: true
+                playing: b.isPicture
                 sourceSize.width: 640
                 fillMode: Image.PreserveAspectFit
+            }
+            Rectangle {
+                visible: b.isVideo && image.status === Image.Ready
+                anchors.centerIn: parent
+                width: 44
+                height: 44
+                radius: 22
+                color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
+                Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
             }
             Text {
                 anchors.centerIn: parent
@@ -134,7 +166,7 @@ Rectangle {
         // Video, document, voice message: a chip (click downloads and opens it)
         Rectangle {
             id: chip
-            visible: b.hasMedia && !b.isPicture
+            visible: b.hasMedia && !b.showsPicture
             width: parent.width
             height: visible ? 40 : 0
             radius: FiliTheme.radiusControl
@@ -167,6 +199,54 @@ Rectangle {
                 }
             }
             MouseArea { id: chipArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
+        }
+        // YouTube link: thumbnail, title; a click opens it in Quick Look
+        Rectangle {
+            visible: b.card
+            width: parent.width
+            height: visible ? width * 9 / 16 + (titleText.implicitHeight > 0 ? titleText.implicitHeight + FiliTheme.space2 : 0) : 0
+            radius: FiliTheme.radiusControl
+            color: FiliTheme.backgroundDeep
+            clip: true
+            Image {
+                id: ytThumb
+                width: parent.width
+                height: width * 9 / 16
+                source: b.card ? "https://i.ytimg.com/vi/" + b.ytId + "/mqdefault.jpg" : ""
+                asynchronous: true
+                fillMode: Image.PreserveAspectCrop
+            }
+            Rectangle {
+                anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: ytThumb.verticalCenter }
+                width: 44
+                height: 44
+                radius: 22
+                color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
+                Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
+            }
+            Text {
+                id: titleText
+                anchors { left: parent.left; right: parent.right; top: ytThumb.bottom; margins: FiliTheme.space2 }
+                visible: b.ytTitle !== ""
+                text: b.ytTitle
+                maximumLineCount: 2
+                wrapMode: Text.Wrap
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                font.family: FiliTheme.font
+                font.pixelSize: FiliTheme.sizeList
+                color: FiliTheme.text
+            }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
+        }
+        Rectangle {
+            visible: b.videoLink
+            width: parent.width
+            height: visible ? 32 : 0
+            radius: FiliTheme.radiusControl
+            color: FiliTheme.alpha(FiliTheme.background, 0.4)
+            Text { anchors { left: parent.left; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter } text: "▶  " + Conversations.tr("Video link"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.accentColor }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         TextEdit {
             visible: b.body !== ""

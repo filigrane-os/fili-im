@@ -18,16 +18,33 @@ Rectangle {
     property var failed: ({})
     property var inflight: ({})
     readonly property var current: items.length > 0 ? items[index] : null
-    readonly property string kind: current && current.media ? current.media.kind : ""
-    readonly property string path: current ? (paths[current.id] || "") : ""
+    // An item: {id (message), m (message), kind (image, video, audio, file, ... or "youtube" / "videourl" for a link), media, url}
+    readonly property string kind: current ? current.kind : ""
+    readonly property string path: current ? (current.kind === "videourl" ? current.url : (paths[current.id] || "")) : ""
+    readonly property bool isYoutube: kind === "youtube"
+    property var titles: ({})
     readonly property bool isPicture: kind === "image" || kind === "sticker"
-    readonly property bool isVideo: kind === "video"
+    readonly property bool isVideo: kind === "video" || kind === "videourl"
     readonly property bool isAudio: kind === "audio" || kind === "voice"
     readonly property bool playable: isVideo || isAudio
 
     // The media of `messages`, oldest first; opens on the message `id`
+    function linkItem(m) {
+        const url = (/https?:\/\/[^\s<>"']+/.exec(m.text.plain) || [""])[0];
+        if (url === "") return null;
+        const yt = /(?:youtube\.com\/(?:watch\?(?:[^\s#]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/.exec(url);
+        if (yt) return Conversations.linkPreviews() ? { id: m.id, m: m, kind: "youtube", url: url, vid: yt[1] } : null;
+        if (/\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i.test(url)) return { id: m.id, m: m, kind: "videourl", url: url };
+        return null;
+    }
     function open(messages, id) {
-        items = messages.filter(m => m.media && !m.deleted);
+        const list = [];
+        for (const m of messages) {
+            if (m.deleted) continue;
+            if (m.media) list.push({ id: m.id, m: m, kind: m.media.kind, media: m.media });
+            else { const l = linkItem(m); if (l) list.push(l); }
+        }
+        items = list;
         const i = items.findIndex(m => m.id === id);
         if (i < 0) return;
         index = i;
@@ -47,9 +64,25 @@ Rectangle {
         for (const k of [i, i + 1, i - 1]) {
             if (k < 0 || k >= items.length) continue;
             const m = items[k];
+            if (!m.media) { loadTitle(m); continue; }
             if (paths[m.id] || failed[m.id] || (k !== i && (m.media.size || 0) > 30000000)) continue;
             fetch(m);
         }
+    }
+    function loadTitle(m) {
+        if (m.kind !== "youtube" || titles[m.vid] !== undefined) return;
+        titles[m.vid] = "";
+        const x = new XMLHttpRequest();
+        x.onreadystatechange = () => {
+            if (x.readyState !== XMLHttpRequest.DONE || x.status !== 200) return;
+            try { const t = Object.assign({}, ql.titles); t[m.vid] = JSON.parse(x.responseText).title || ""; ql.titles = t; } catch (e) { }
+        };
+        x.open("GET", "https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + m.vid));
+        x.send();
+    }
+    function playLink() {
+        if (!current || !current.url) return;
+        if (!Conversations.playLink(current.url)) Conversations.openUrl(current.url);
     }
     function fetch(m) {
         if (inflight[m.id]) return;
@@ -75,7 +108,7 @@ Rectangle {
     }
     onPathChanged: {
         player.stop();
-        player.source = playable && path !== "" ? "file://" + encodeURI(path) : "";
+        player.source = playable && path !== "" ? (kind === "videourl" ? path : "file://" + encodeURI(path)) : "";
         if (playable && path !== "" && visible) player.play();
     }
     onKindChanged: if (!playable) player.source = ""
@@ -83,7 +116,7 @@ Rectangle {
     Keys.onEscapePressed: close()
     Keys.onLeftPressed: go(-1)
     Keys.onRightPressed: go(1)
-    Keys.onSpacePressed: playable && path !== "" ? togglePlay() : close()
+    Keys.onSpacePressed: isYoutube ? playLink() : playable && path !== "" ? togglePlay() : close()
 
     MediaPlayer {
         id: player
@@ -101,7 +134,7 @@ Rectangle {
         height: 44
         Text {
             anchors { left: parent.left; leftMargin: FiliTheme.margin; right: tools.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
-            text: ql.current ? ((ql.current.sender_name || (ql.current.from_me ? Conversations.tr("You") : "")) + (ql.current.media.name ? " · " + ql.current.media.name : "")) : ""
+            text: ql.current ? ((ql.current.m.sender_name || (ql.current.m.from_me ? Conversations.tr("You") : "")) + (ql.current.media && ql.current.media.name ? " · " + ql.current.media.name : ql.current.url ? " · " + ql.current.url : "")) : ""
             elide: Text.ElideMiddle
             textFormat: Text.PlainText
             font.family: FiliTheme.font
@@ -120,8 +153,8 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
             }
-            IconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current; ql.close(); win.forwardMessage(m); } }
-            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== ""; onClicked: Conversations.openUrl("file://" + encodeURI(ql.path)) }
+            IconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current.m; ql.close(); win.forwardMessage(m); } }
+            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isYoutube; onClicked: Conversations.openUrl(ql.current.url ? ql.current.url : "file://" + encodeURI(ql.path)) }
             IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: ql.close() }
         }
     }
@@ -131,8 +164,9 @@ Rectangle {
         id: stage
         anchors { left: parent.left; right: parent.right; top: top.bottom; bottom: bar.top; leftMargin: 64; rightMargin: 64 }
         MouseArea { anchors.fill: parent; onClicked: ql.playable && ql.path !== "" ? ql.togglePlay() : undefined }
-        Image {
+        AnimatedImage {
             anchors.fill: parent
+            playing: visible
             visible: ql.isPicture && ql.path !== ""
             source: ql.isPicture && ql.path !== "" ? "file://" + encodeURI(ql.path) : ""
             fillMode: Image.PreserveAspectFit
@@ -148,7 +182,7 @@ Rectangle {
         // Voice message / audio / document: a card
         Column {
             anchors.centerIn: parent
-            visible: (ql.isAudio || (!ql.isPicture && !ql.isVideo)) && ql.current !== null
+            visible: (ql.isAudio || (!ql.isPicture && !ql.isVideo && !ql.isYoutube)) && ql.current !== null
             spacing: FiliTheme.space2
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -158,7 +192,7 @@ Rectangle {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: ql.current && ql.current.media.name ? ql.current.media.name : (ql.current ? ql.current.media.kind : "")
+                text: ql.current && ql.current.media ? (ql.current.media.name || ql.current.media.kind) : ""
                 textFormat: Text.PlainText
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.size
@@ -166,7 +200,7 @@ Rectangle {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: ql.current ? ql.sizeText(ql.current.media.size) : ""
+                text: ql.current && ql.current.media ? ql.sizeText(ql.current.media.size) : ""
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
@@ -177,6 +211,41 @@ Rectangle {
                 label: Conversations.tr("Open")
                 onClicked: Conversations.openUrl("file://" + encodeURI(ql.path))
             }
+        }
+        // YouTube link: thumbnail and title; Space or the button plays it in mpv (a web player would need a browser engine)
+        Column {
+            anchors.centerIn: parent
+            visible: ql.isYoutube
+            spacing: FiliTheme.space3
+            Image {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(stage.width - 32, 640)
+                height: width * 9 / 16
+                source: ql.isYoutube ? "https://i.ytimg.com/vi/" + ql.current.vid + "/hqdefault.jpg" : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 64
+                    height: 64
+                    radius: 32
+                    color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
+                    Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 26; color: FiliTheme.text }
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ql.playLink() }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(stage.width - 32, 640)
+                horizontalAlignment: Text.AlignHCenter
+                text: ql.isYoutube ? (ql.titles[ql.current.vid] || "") : ""
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                font.family: FiliTheme.font
+                font.pixelSize: FiliTheme.size
+                color: FiliTheme.text
+            }
+            TextButton { anchors.horizontalCenter: parent.horizontalCenter; label: Conversations.tr("Play"); primary: true; onClicked: ql.playLink() }
         }
         // Waiting / failure
         Text {
