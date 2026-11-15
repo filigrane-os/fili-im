@@ -30,6 +30,8 @@ fn main() {
                 "qml/WindowPanel.qml",
                 "qml/KineticScroll.qml",
                 "qml/AboutCard.qml",
+                "qml/ShortcutsCard.qml",
+                "qml/SwitchCard.qml",
                 "qml/Icon.qml",
                 "qml/Field.qml",
                 "qml/IconButton.qml",

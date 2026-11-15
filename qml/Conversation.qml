@@ -124,6 +124,8 @@ Rectangle {
                     if (m.text.plain !== "") entries.push({ id: "copy", label: Conversations.tr("Copy") });
                     if (m.from_me && view.caps.edit && !m.deleted && m.kind === "text" && m.native_id) entries.push({ id: "edit", label: Conversations.tr("Edit…") });
                     if (m.from_me && view.caps.delete && !m.deleted && m.native_id) entries.push({ id: "delete-all", label: Conversations.tr("Delete for Everyone"), danger: true });
+                    if (view.caps.reactions && view.caps.reactions !== "none" && m.native_id && !m.deleted)
+                        ["👍", "❤️", "😂", "😮", "😢", "🙏"].forEach(e => entries.push({ id: "react:" + e, label: Conversations.tr("React") + " " + e }));
                     if (m.state === "failed") entries.push({ id: "retry", label: Conversations.tr("Send Again") });
                     if (entries.length === 0) return;
                     menu.message = m;
@@ -160,6 +162,7 @@ Rectangle {
             else if (id === "copy") Conversations.copyText(m.text.plain);
             else if (id === "edit") composer.startEdit(m);
             else if (id === "delete-all") win.rpc("delete", { message: m.id, for_everyone: true });
+            else if (id.startsWith("react:")) win.rpc("react", { message: m.id, emoji: id.slice(6) });
             else if (id === "retry") win.rpc("message.retry", { message: m.id });
         }
     }

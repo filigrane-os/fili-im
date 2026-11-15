@@ -82,6 +82,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "openUrl"]
         fn open_url(self: &Conversations, url: &QString);
+        // Files or a picture on the clipboard: JSON array of paths or file:// urls (a picture is saved first)
+        #[qinvokable]
+        #[cxx_name = "clipboardFiles"]
+        fn clipboard_files(self: &Conversations) -> QString;
         // Put text on the clipboard of the desktop (wl-copy)
         #[qinvokable]
         #[cxx_name = "copyText"]
@@ -314,6 +318,39 @@ impl qobject::Conversations {
                 .stderr(std::process::Stdio::null())
                 .spawn();
         }
+    }
+
+    pub fn clipboard_files(&self) -> QString {
+        let wl = |args: &[&str]| {
+            std::process::Command::new("wl-paste")
+                .args(args)
+                .stdin(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+        };
+        let Some(types) = wl(&["--list-types"]) else { return QString::from("[]") };
+        let types = String::from_utf8_lossy(&types.stdout).into_owned();
+        let mut found: Vec<String> = Vec::new();
+        if types.lines().any(|t| t == "text/uri-list")
+            && let Some(list) = wl(&["--no-newline", "--type", "text/uri-list"])
+        {
+            found =
+                String::from_utf8_lossy(&list.stdout).lines().filter(|l| l.starts_with("file://")).map(str::to_owned).collect();
+        }
+        if found.is_empty()
+            && types.lines().any(|t| t == "image/png")
+            && let Some(png) = wl(&["--type", "image/png"])
+        {
+            let dir = crate::paths::runtime_dir();
+            let _ = crate::paths::private_dir(&dir);
+            let path = dir.join(format!("pasted-{}.png", crate::store::now_ms()));
+            if std::fs::write(&path, &png.stdout).is_ok() {
+                found.push(path.display().to_string());
+            }
+        }
+        QString::from(&json!(found).to_string())
     }
 
     pub fn copy_text(&self, text: &QString) {

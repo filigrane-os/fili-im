@@ -20,6 +20,7 @@ pub const ACTIONS: &[&str] = &[
     "previous-tab",
     "close-tab",
     "reply",
+    "shortcuts",
     "mark-read",
     "refresh",
     "add-account",
@@ -37,6 +38,11 @@ pub const ACTIONS: &[&str] = &[
     "focus-composer",
 ];
 
+/// `open-chat:<id>`: show a conversation (from a notification or the bar panel).
+fn is_open_chat(name: &str) -> bool {
+    name.strip_prefix("open-chat:").is_some_and(|id| !id.is_empty() && id.len() < 12 && id.bytes().all(|b| b.is_ascii_digit()))
+}
+
 fn dir() -> Option<PathBuf> {
     let dir = PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join("fili-im").join("windows");
     fs::create_dir_all(&dir).ok()?;
@@ -45,7 +51,7 @@ fn dir() -> Option<PathBuf> {
 
 fn answer(request: &str) -> (String, Option<String>) {
     let (verb, name) = request.trim().split_once('\t').unwrap_or((request.trim(), ""));
-    if verb == "action" && ACTIONS.contains(&name) {
+    if verb == "action" && (ACTIONS.contains(&name) || is_open_chat(name)) {
         ("{\"ok\":true}".into(), Some(name.to_owned()))
     } else if verb == "action" {
         (format!("{{\"ok\":false,\"error\":\"unknown action: {}\"}}", name.replace(['"', '\\'], "")), None)
@@ -155,6 +161,14 @@ mod tests {
         let (reply, action) = answer("action\treply\n");
         assert_eq!(reply, "{\"ok\":true}");
         assert_eq!(action.as_deref(), Some("reply"));
+    }
+
+    #[test]
+    fn a_conversation_can_be_opened_by_id_only() {
+        assert!(is_open_chat("open-chat:42"));
+        assert!(!is_open_chat("open-chat:"));
+        assert!(!is_open_chat("open-chat:4;rm"));
+        assert_eq!(answer("action\topen-chat:7\n").1.as_deref(), Some("open-chat:7"));
     }
 
     #[test]

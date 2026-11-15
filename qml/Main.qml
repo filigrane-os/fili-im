@@ -157,7 +157,8 @@ ApplicationWindow {
     Connections {
         target: Conversations
         function onCommand(name) {
-            if (name === "about") aboutCard.show();
+            if (name.startsWith("open-chat:")) { win.openChat(parseInt(name.slice(10))); win.raise(); win.requestActivate(); }
+            else if (name === "about") aboutCard.show();
             else if (name === "close") Qt.quit();
             else if (name === "window-actions") windowPanel.visible ? windowPanel.close() : windowPanel.open();
             else if (name === "toggle-header") win.showHeader = !win.showHeader;
@@ -177,7 +178,8 @@ ApplicationWindow {
             else if (name === "focus-composer") conversation.focusComposer();
             else if (name === "add-account") win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }));
             else if (name === "pair") sidebar.pairFirst();
-            else if (name === "new-conversation") win.openSearch();
+            else if (name === "new-conversation") switchCard.show();
+            else if (name === "shortcuts") shortcutsCard.show();
             else if (name === "copy") conversation.copySelection();
             else if (name === "select-all") conversation.selectAll();
         }
@@ -187,7 +189,9 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+Shift+Tab"]; onActivated: win.cycleTab(-1) }
     Shortcut { sequences: ["Alt+Down"]; onActivated: win.cycleChat(1) }
     Shortcut { sequences: ["Alt+Up"]; onActivated: win.cycleChat(-1) }
-    Shortcut { sequences: ["Ctrl+F", "Ctrl+N"]; onActivated: win.openSearch() }
+    Shortcut { sequences: ["Ctrl+F"]; onActivated: win.openSearch() }
+    Shortcut { sequences: ["Ctrl+K", "Ctrl+N"]; onActivated: switchCard.show() }
+    Shortcut { sequences: ["F1", "Ctrl+/"]; onActivated: shortcutsCard.show() }
     Shortcut { sequences: ["Ctrl+U"]; onActivated: win.filter = win.filter === "unread" ? "all" : "unread" }
     Shortcut { sequences: ["Ctrl+Shift+W"]; onActivated: windowPanel.visible ? windowPanel.close() : windowPanel.open() }
     Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: win.reload() }
@@ -348,4 +352,6 @@ ApplicationWindow {
         anchorTop: toolbar.height + 1
     }
     AboutCard { id: aboutCard; anchors.fill: parent }
+    ShortcutsCard { id: shortcutsCard; anchors.fill: parent }
+    SwitchCard { id: switchCard; anchors.fill: parent }
 }

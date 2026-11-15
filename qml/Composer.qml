@@ -139,6 +139,10 @@ Rectangle {
         selectedTextColor: FiliTheme.text
         background: null
         Keys.onPressed: e => {
+            if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier)) {
+                const pasted = JSON.parse(Conversations.clipboardFiles());
+                if (pasted.length > 0) { c.addFiles(pasted); e.accepted = true; return; }
+            }
             if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
             else if (e.key === Qt.Key_Escape) { c.cancel(); e.accepted = true; }
             else if (e.key === Qt.Key_Up && text === "" && c.lastMine && c.caps && c.caps.edit) { c.startEdit(c.lastMine); e.accepted = true; }
