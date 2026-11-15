@@ -16,7 +16,7 @@ Rectangle {
                 required property int modelData
                 readonly property var chat: win.chatById(modelData)
                 height: FiliTheme.tabHeight
-                width: Math.max(80, Math.min(180, label.implicitWidth + close.width + 3 * FiliTheme.space4))
+                width: Math.max(80, Math.min(180, label.implicitWidth + 14 + 3 * FiliTheme.space4))
                 radius: FiliTheme.radiusControl
                 color: modelData === win.current ? FiliTheme.surfaceActive : tabArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
                 Text {
@@ -44,7 +44,7 @@ Rectangle {
                     visible: tabArea.containsMouse || modelData === win.current
                     font.pixelSize: FiliTheme.size
                     color: closeArea.containsMouse ? FiliTheme.text : FiliTheme.muted
-                    width: visible ? implicitWidth : 0
+                    width: 14
                     MouseArea { id: closeArea; anchors { fill: parent; margins: -4 } hoverEnabled: true; onClicked: win.closeTab(modelData) }
                 }
             }
