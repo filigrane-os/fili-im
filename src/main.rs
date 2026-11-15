@@ -65,6 +65,8 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         limit: i64,
     },
+    /// Show the window, on a conversation if given (starts it when it is not open)
+    Open { chat: Option<i64> },
     /// Print the daemon's events as they come (JSON lines)
     Watch,
 }
@@ -155,10 +157,15 @@ fn account_line(a: &Value) -> String {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if let Some(Cmd::Open { chat }) = cli.command {
+        // No daemon needed: this only drives the window
+        fili_im::ctl::show_window(&chat.map(|c| vec![format!("open-chat:{c}")]).unwrap_or_default());
+        return Ok(());
+    }
     let mut client = Client::connect()?;
     let j = cli.json;
     match cli.command.unwrap_or(Cmd::Status) {
-        Cmd::Daemon => unreachable!(),
+        Cmd::Daemon | Cmd::Open { .. } => unreachable!(),
         Cmd::Status => {
             let status = client.call("status", json!({}))?;
             print(j, &status, |s| {
