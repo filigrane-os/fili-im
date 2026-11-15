@@ -135,3 +135,24 @@ func TestReactionsEditsRevokesAndNoise(t *testing.T) {
 		t.Fatalf("stories are skipped: %+v", out)
 	}
 }
+
+func TestBusinessMessagesAndVideoNotes(t *testing.T) {
+	tpl := &waE2E.Message{TemplateMessage: &waE2E.TemplateMessage{HydratedTemplate: &waE2E.TemplateMessage_HydratedFourRowTemplate{
+		HydratedContentText: proto.String("Votre colis arrive demain"), HydratedFooterText: proto.String("La Poste"),
+	}}}
+	if out := Convert(msg(paul, paul, tpl), canon); out.Message.Kind != "text" || out.Message.Text.Plain != "Votre colis arrive demain\nLa Poste" {
+		t.Fatalf("template %+v", out.Message)
+	}
+	answer := &waE2E.Message{ButtonsResponseMessage: &waE2E.ButtonsResponseMessage{Response: &waE2E.ButtonsResponseMessage_SelectedDisplayText{SelectedDisplayText: "Oui"}}}
+	if out := Convert(msg(paul, paul, answer), canon); out.Message.Text.Plain != "Oui" {
+		t.Fatalf("button answer %+v", out.Message)
+	}
+	ptv := &waE2E.Message{PtvMessage: &waE2E.VideoMessage{Mimetype: proto.String("video/mp4")}}
+	if out := Convert(msg(paul, paul, ptv), canon); out.Message.Kind != "video" || out.MediaProto.GetVideoMessage() == nil {
+		t.Fatalf("video note %+v", out)
+	}
+	album := &waE2E.Message{AlbumMessage: &waE2E.AlbumMessage{}}
+	if out := Convert(msg(paul, paul, album), canon); out.Kind != skip {
+		t.Fatalf("albums are noise (their photos come one by one): %+v", out)
+	}
+}

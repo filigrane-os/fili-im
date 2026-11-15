@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -56,6 +57,9 @@ func main() {
 		os.Exit(2)
 	}
 	_ = account
+	// Stay small: collect sooner and aim under 32 MB (a soft limit; a big history sync may still go above for a moment).
+	debug.SetGCPercent(50)
+	debug.SetMemoryLimit(32 << 20)
 	out := NewOut(os.Stdout)
 	out.Event("hello", map[string]any{
 		"protocol": protocolVersion, "platform": "whatsapp", "name": "WhatsApp", "version": version, "capabilities": capabilities(),

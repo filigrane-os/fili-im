@@ -3,7 +3,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
+
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -72,6 +75,7 @@ func contextOf(m *waE2E.Message) *waE2E.ContextInfo {
 func noise(m *waE2E.Message) bool {
 	return m.GetPollUpdateMessage() != nil || m.GetKeepInChatMessage() != nil || m.GetPinInChatMessage() != nil ||
 		m.GetEncReactionMessage() != nil || m.GetSecretEncryptedMessage() != nil ||
+		m.GetAlbumMessage() != nil || m.GetPlaceholderMessage() != nil || m.GetCallLogMesssage() != nil ||
 		(m.GetSenderKeyDistributionMessage() != nil && m.GetConversation() == "" && m.GetExtendedTextMessage() == nil &&
 			m.GetImageMessage() == nil && m.GetVideoMessage() == nil && m.GetAudioMessage() == nil &&
 			m.GetDocumentMessage() == nil && m.GetStickerMessage() == nil)
@@ -122,6 +126,20 @@ func body(m *waE2E.Message) (kind string, text string, media *Media, part *waE2E
 			names = append(names, c.GetDisplayName())
 		}
 		return "contact", strings.Join(names, ", "), nil, nil, true
+	case m.GetPtvMessage() != nil:
+		// A round video note.
+		v := m.GetPtvMessage()
+		return "video", v.GetCaption(), &Media{Kind: "video", Mime: v.GetMimetype(), Size: v.GetFileLength()},
+			&waE2E.Message{VideoMessage: v}, true
+	}
+	if text, ok := businessText(m); ok {
+		return "text", text, nil, nil, true
+	}
+	if g := m.GetGroupInviteMessage(); g != nil {
+		return "text", joinLines("Invitation to join the group "+g.GetGroupName(), g.GetCaption()), nil, nil, true
+	}
+	if e := m.GetEventMessage(); e != nil {
+		return "unsupported", joinLines("Event: "+e.GetName(), e.GetDescription()), nil, nil, true
 	}
 	if p := pollOf(m); p != nil {
 		lines := []string{p.GetName()}
@@ -205,7 +223,8 @@ func Convert(evt *events.Message, canon Canon) Outcome {
 	}
 	kind, text, media, part, ok := body(m)
 	if !ok {
-		// Something WhatsApp has and Conversations does not show yet: say so rather than lose it.
+		// Something WhatsApp has and Conversations does not show yet: say so rather than lose it, and log its kind.
+		fmt.Fprintf(os.Stderr, "fili-im-whatsapp: unsupported message parts: %s\n", strings.Join(fieldNames(m), ", "))
 		base.Kind = "unsupported"
 		return Outcome{Kind: content, Message: base}
 	}
@@ -222,4 +241,63 @@ func Convert(evt *events.Message, canon Canon) Outcome {
 		base.ReplyTo = ci.GetStanzaID()
 	}
 	return Outcome{Kind: content, Message: base, MediaProto: part}
+}
+
+func joinLines(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// businessText: what business accounts send (templates, buttons, lists, interactive cards) and the answers to them,
+// shown as their text.
+func businessText(m *waE2E.Message) (string, bool) {
+	switch {
+	case m.GetTemplateMessage() != nil:
+		t := m.GetTemplateMessage()
+		if h := t.GetHydratedTemplate(); h != nil {
+			return joinLines(h.GetHydratedTitleText(), h.GetHydratedContentText(), h.GetHydratedFooterText()), true
+		}
+		if f := t.GetHydratedFourRowTemplate(); f != nil {
+			return joinLines(f.GetHydratedTitleText(), f.GetHydratedContentText(), f.GetHydratedFooterText()), true
+		}
+		if i := t.GetInteractiveMessageTemplate(); i != nil {
+			return joinLines(i.GetHeader().GetTitle(), i.GetBody().GetText(), i.GetFooter().GetText()), true
+		}
+		return "", true
+	case m.GetButtonsMessage() != nil:
+		b := m.GetButtonsMessage()
+		return joinLines(b.GetText(), b.GetContentText(), b.GetFooterText()), true
+	case m.GetInteractiveMessage() != nil:
+		i := m.GetInteractiveMessage()
+		return joinLines(i.GetHeader().GetTitle(), i.GetBody().GetText(), i.GetFooter().GetText()), true
+	case m.GetListMessage() != nil:
+		l := m.GetListMessage()
+		return joinLines(l.GetTitle(), l.GetDescription(), l.GetFooterText()), true
+	case m.GetButtonsResponseMessage() != nil:
+		return m.GetButtonsResponseMessage().GetSelectedDisplayText(), true
+	case m.GetTemplateButtonReplyMessage() != nil:
+		return m.GetTemplateButtonReplyMessage().GetSelectedDisplayText(), true
+	case m.GetListResponseMessage() != nil:
+		return m.GetListResponseMessage().GetTitle(), true
+	case m.GetInteractiveResponseMessage() != nil:
+		return m.GetInteractiveResponseMessage().GetBody().GetText(), true
+	}
+	return "", false
+}
+
+// fieldNames: the kinds of parts a message has (never their content), to log what Conversations does not show yet.
+func fieldNames(m *waE2E.Message) []string {
+	var names []string
+	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		if name := string(fd.Name()); name != "messageContextInfo" {
+			names = append(names, name)
+		}
+		return true
+	})
+	return names
 }

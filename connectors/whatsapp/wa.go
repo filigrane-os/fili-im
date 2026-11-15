@@ -34,6 +34,9 @@ type Connector struct {
 	container *sqlstore.Container
 	local     *Local
 
+	// Users already announced to the daemon with their phone number (and push name), so unknown numbers get a title.
+	announced sync.Map
+
 	mu      sync.Mutex
 	client  *whatsmeow.Client
 	pairing context.CancelFunc // set while a QR/code pairing runs
@@ -247,6 +250,7 @@ func (c *Connector) message(evt *events.Message, live bool) {
 		if m.Text != nil {
 			body = m.Text.Plain
 		}
+		c.noteUsers(evt)
 		c.local.Remember(ctx, m.Chat, m.ID, evt.Info.Chat.String(), evt.Info.Sender.ToNonAD().String(), m.FromMe, m.Timestamp, body, out.MediaProto)
 		c.out.Event("message.new", map[string]any{"live": live, "message": m})
 	case reaction:
@@ -258,6 +262,16 @@ func (c *Connector) message(evt *events.Message, live bool) {
 		c.out.Event("message.edit", map[string]any{"chat": m.Chat, "id": out.Target, "text": out.Text, "timestamp": m.Timestamp})
 	case revoke:
 		c.out.Event("message.delete", map[string]any{"chat": m.Chat, "id": out.Target})
+	}
+}
+
+// noteUsers: the other person of a direct chat and the sender of a message are announced once.
+func (c *Connector) noteUsers(evt *events.Message) {
+	if evt.Info.Chat.Server != types.GroupServer {
+		c.ensureContact(evt.Info.Chat, "")
+	}
+	if !evt.Info.IsFromMe {
+		c.ensureContact(evt.Info.Sender, evt.Info.PushName)
 	}
 }
 
@@ -329,6 +343,9 @@ func (c *Connector) history(evt *events.HistorySync) {
 			ch.MutedUntil = &until
 		}
 		c.out.Event("chat.upsert", map[string]any{"chat": ch})
+		if chatJID.Server != types.GroupServer {
+			c.ensureContact(chatJID, "")
+		}
 		for _, hm := range conv.GetMessages() {
 			parsed, err := cli.ParseWebMessage(chatJID, hm.GetMessage())
 			if err != nil {
@@ -341,6 +358,7 @@ func (c *Connector) history(evt *events.HistorySync) {
 				if out.Message.Text != nil {
 					body = out.Message.Text.Plain
 				}
+				c.noteUsers(parsed)
 				c.local.Remember(ctx, out.Message.Chat, out.Message.ID, parsed.Info.Chat.String(), parsed.Info.Sender.ToNonAD().String(),
 					out.Message.FromMe, out.Message.Timestamp, body, out.MediaProto)
 				batch = append(batch, out.Message)
@@ -378,6 +396,25 @@ func (c *Connector) pushName(jid types.JID, name string) {
 	c.contact(jid, name)
 }
 
+// ensureContact: the first time a user shows up, tell the daemon their phone number, and their push name when the
+// address book has no name for them; a stranger then reads "+33…" or "~Name" instead of an internal id.
+func (c *Connector) ensureContact(jid types.JID, pushName string) {
+	id := c.canon(jid)
+	if id.Server != types.DefaultUserServer && id.Server != types.HiddenUserServer {
+		return
+	}
+	if _, seen := c.announced.LoadOrStore(id.String(), true); seen {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	c.local.Seen(ctx, jid.ToNonAD().String())
+	cancel()
+	if phone := phoneOf(id); phone != "" {
+		c.out.Event("contact.upsert", map[string]any{"contact": Contact{ID: id.String(), Phone: phone}})
+	}
+	c.pushName(jid, pushName)
+}
+
 func (c *Connector) contact(jid types.JID, name string) {
 	id := c.canon(jid)
 	c.out.Event("contact.upsert", map[string]any{"contact": Contact{ID: id.String(), Name: name, Phone: phoneOf(id)}})
@@ -389,6 +426,11 @@ func (c *Connector) syncDirectory() {
 	defer cancel()
 	cli := c.cli()
 	c.local.Prune(ctx)
+	for _, raw := range c.local.Users(ctx) {
+		if jid, err := types.ParseJID(raw); err == nil {
+			c.ensureContact(jid, "")
+		}
+	}
 	if contacts, err := cli.Store.Contacts.GetAllContacts(ctx); err == nil {
 		for jid, info := range contacts {
 			name := info.FullName

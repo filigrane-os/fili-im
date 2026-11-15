@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS msgs (
     PRIMARY KEY (chat, id)
 );
 CREATE INDEX IF NOT EXISTS msgs_chat_ts ON msgs(chat, ts);
+CREATE TABLE IF NOT EXISTS users (jid TEXT PRIMARY KEY);
 `
 
 // Messages older than this are forgotten here (the daemon keeps them): replies and reactions to them still work in
@@ -92,6 +93,28 @@ func (l *Local) Latest(ctx context.Context, chat string) (string, known, bool) {
 	err := l.db.QueryRowContext(ctx, "SELECT id, raw_chat, raw_sender, from_me, body, ts FROM msgs WHERE chat = ? ORDER BY ts DESC LIMIT 1", chat).
 		Scan(&id, &k.RawChat, &k.RawSender, &k.FromMe, &k.Body, &k.Timestamp)
 	return id, k, err == nil
+}
+
+// Seen records a user (or the other person of a direct chat); Users gives them all back, so their numbers can be
+// announced again after a restart. Never pruned: one short row per person.
+func (l *Local) Seen(ctx context.Context, jid string) {
+	_, _ = l.db.ExecContext(ctx, "INSERT OR IGNORE INTO users (jid) VALUES (?)", jid)
+}
+
+func (l *Local) Users(ctx context.Context) []string {
+	rows, err := l.db.QueryContext(ctx, "SELECT jid FROM users UNION SELECT DISTINCT raw_chat FROM msgs WHERE raw_chat NOT LIKE '%@g.us'")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 var errNoMedia = errors.New("no media for this message")
