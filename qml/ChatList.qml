@@ -18,7 +18,7 @@ Rectangle {
         const m = c.last;
         if (!m) return "";
         if (m.deleted) return Conversations.tr("Message deleted");
-        const kinds = { image: "Photo", video: "Video", audio: "Voice message", document: "Document", sticker: "Sticker", location: "Location", contact: "Contact" };
+        const kinds = { image: "Photo", video: "Video", audio: "Voice message", voice: "Voice message", file: "Document", document: "Document", sticker: "Sticker", location: "Location", contact: "Contact" };
         const body = m.text && m.text.plain ? m.text.plain.replace(/\s+/g, " ") : (kinds[m.kind] ? Conversations.tr(kinds[m.kind]) : "");
         return (m.from_me ? Conversations.tr("You") + ": " : (c.kind !== "direct" && m.sender_name ? m.sender_name + ": " : "")) + body;
     }

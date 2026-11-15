@@ -39,7 +39,8 @@ fn main() {
             ])
             .qml_file(QmlFile::from("qml/FiliTheme.qml").singleton(true))
             .depend("QtQuick")
-            .depend("QtQuick.Controls"),
+            .depend("QtQuick.Controls")
+            .depend("QtQuick.Dialogs"),
     )
     // Fonts of the interface travel with the binary: the application looks the same on any distribution
     .qrc_resources([

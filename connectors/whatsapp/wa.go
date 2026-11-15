@@ -3,9 +3,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -596,11 +599,12 @@ func sendError(err error) error {
 }
 
 func (c *Connector) send(ctx context.Context, cli *whatsmeow.Client, chat types.JID, cmd *Command) (any, error) {
-	if cmd.Text == nil || strings.TrimSpace(cmd.Text.Plain) == "" {
+	hasMedia := len(cmd.Media) > 0 && string(cmd.Media) != "null"
+	if !hasMedia && (cmd.Text == nil || strings.TrimSpace(cmd.Text.Plain) == "") {
 		return nil, fail("invalid", "empty message")
 	}
-	if len(cmd.Media) > 0 && string(cmd.Media) != "null" {
-		return nil, fail("unsupported", "sending files is not available yet")
+	if cmd.Text == nil {
+		cmd.Text = &Text{}
 	}
 	// Idempotent on client_id: the same id goes out again, and WhatsApp drops the duplicate.
 	id, seen := "", false
@@ -617,8 +621,9 @@ func (c *Connector) send(ctx context.Context, cli *whatsmeow.Client, chat types.
 	}
 	text := FormatMarkup(*cmd.Text)
 	msg := &waE2E.Message{Conversation: proto.String(text)}
+	var ctxInfo *waE2E.ContextInfo
 	if cmd.ReplyTo != "" {
-		ctxInfo := &waE2E.ContextInfo{StanzaID: proto.String(cmd.ReplyTo)}
+		ctxInfo = &waE2E.ContextInfo{StanzaID: proto.String(cmd.ReplyTo)}
 		if k, ok := c.local.Known(ctx, chat.String(), cmd.ReplyTo); ok {
 			participant := k.RawSender
 			if k.FromMe {
@@ -628,6 +633,13 @@ func (c *Connector) send(ctx context.Context, cli *whatsmeow.Client, chat types.
 			ctxInfo.QuotedMessage = &waE2E.Message{Conversation: proto.String(k.Body)}
 		}
 		msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}}
+	}
+	if hasMedia {
+		built, err := c.mediaMessage(ctx, cli, cmd.Media, text, ctxInfo)
+		if err != nil {
+			return nil, err
+		}
+		msg = built
 	}
 	resp, err := cli.SendMessage(ctx, chat, msg, whatsmeow.SendRequestExtra{ID: id})
 	if err != nil {
@@ -792,4 +804,64 @@ func (c *Connector) logout(ctx context.Context) error {
 	c.setClient(c.container.NewDevice())
 	c.out.State("logged_out", "", nil)
 	return nil
+}
+
+// mediaMessage uploads the file of a `send` command and wraps it as the WhatsApp message of its kind; the text is the
+// caption.
+func (c *Connector) mediaMessage(ctx context.Context, cli *whatsmeow.Client, raw json.RawMessage, caption string, ctxInfo *waE2E.ContextInfo) (*waE2E.Message, error) {
+	var in struct {
+		Path string `json:"path"`
+		Kind string `json:"kind"`
+		Mime string `json:"mime"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil || in.Path == "" {
+		return nil, fail("invalid", "missing media path")
+	}
+	data, err := os.ReadFile(in.Path)
+	if err != nil {
+		return nil, fail("failed", "cannot read the file: %v", err)
+	}
+	mime := in.Mime
+	if mime == "" {
+		mime = http.DetectContentType(data)
+	}
+	name := in.Name
+	if name == "" {
+		name = filepath.Base(in.Path)
+	}
+	kind := whatsmeow.MediaDocument
+	switch in.Kind {
+	case "image":
+		kind = whatsmeow.MediaImage
+	case "video":
+		kind = whatsmeow.MediaVideo
+	}
+	up, err := cli.Upload(ctx, data, kind)
+	if err != nil {
+		return nil, sendError(err)
+	}
+	var capt *string
+	if caption != "" {
+		capt = proto.String(caption)
+	}
+	switch in.Kind {
+	case "image":
+		return &waE2E.Message{ImageMessage: &waE2E.ImageMessage{
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, Mimetype: &mime,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &up.FileLength,
+			Caption: capt, ContextInfo: ctxInfo,
+		}}, nil
+	case "video":
+		return &waE2E.Message{VideoMessage: &waE2E.VideoMessage{
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, Mimetype: &mime,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &up.FileLength,
+			Caption: capt, ContextInfo: ctxInfo,
+		}}, nil
+	}
+	return &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{
+		URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, Mimetype: &mime,
+		FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &up.FileLength,
+		FileName: proto.String(name), Title: proto.String(name), Caption: capt, ContextInfo: ctxInfo,
+	}}, nil
 }

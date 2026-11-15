@@ -321,21 +321,36 @@ impl Daemon {
     // Actions behind the control socket
 
     /// Queue a message and hand the outbox to the connector.
-    fn send(self: &Arc<Self>, chat: i64, text: Text, reply_to: Option<String>) -> Result<Value, crate::protocol::ErrorBody> {
+    fn send(
+        self: &Arc<Self>,
+        chat: i64,
+        text: Text,
+        reply_to: Option<String>,
+        media: Option<crate::protocol::Media>,
+    ) -> Result<Value, crate::protocol::ErrorBody> {
         use crate::protocol::ErrorBody;
         let store = self.store.lock().unwrap();
         let Some((account, _, _)) = store.chat_ref(chat).map_err(internal)? else {
             return Err(ErrorBody::new("not_found", "no such conversation"));
         };
-        if text.plain.trim().is_empty() {
+        if text.plain.trim().is_empty() && media.is_none() {
             return Err(ErrorBody::new("invalid", "the message is empty"));
         }
         let mut params = Map::new();
         if let Some(reply_to) = &reply_to {
             params.insert("reply_to".into(), json!(reply_to));
         }
-        store.capabilities(&account).map_err(internal)?.allows("send", &params).map_err(|m| ErrorBody::new("unsupported", m))?;
-        let id = store.queue(chat, &text, reply_to.as_deref(), &client_id()).map_err(internal)?;
+        if let Some(media) = &media {
+            params.insert("media".into(), json!({"kind": media.kind}));
+        }
+        let caps = store.capabilities(&account).map_err(internal)?;
+        caps.allows("send", &params).map_err(|m| ErrorBody::new("unsupported", m))?;
+        if let (Some(media), Some(max)) = (&media, caps.media_max_bytes)
+            && media.size.is_some_and(|s| s > max)
+        {
+            return Err(ErrorBody::new("too_large", format!("the file is larger than {} MB", max / 1_000_000)));
+        }
+        let id = store.queue(chat, &text, reply_to.as_deref(), media.as_ref(), &client_id()).map_err(internal)?;
         let view = store.message_view(id).map_err(internal)?.unwrap_or(Value::Null);
         drop(store);
         self.broadcast(json!({"event": "message", "message": view}));
@@ -383,6 +398,9 @@ async fn dispatch(daemon: &Arc<Daemon>, conn: &Arc<Connector>, out: Outgoing) ->
     params.insert("chat".into(), json!(out.chat));
     params.insert("client_id".into(), json!(out.client_id));
     params.insert("text".into(), serde_json::to_value(&out.text).unwrap_or(Value::Null));
+    if let Some(media) = &out.media {
+        params.insert("media".into(), serde_json::to_value(media).unwrap_or(Value::Null));
+    }
     if let Some(reply_to) = &out.reply_to {
         params.insert("reply_to".into(), json!(reply_to));
     }

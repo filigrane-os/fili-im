@@ -139,18 +139,19 @@ func (o *Out) Reply(id uint64, result any, err *ErrorBody) {
 
 func capabilities() map[string]any {
 	return map[string]any{
-		"pairing":       []string{"qr", "code"},
-		"message_kinds": []string{"text"},
-		"edit":          map[string]any{"window_s": 900},
-		"delete":        map[string]any{"window_s": 172800},
-		"reactions":     "one_per_user",
-		"replies":       true,
-		"threads":       false,
-		"receipts":      map[string]any{"send": true, "suppress": true},
-		"typing":        map[string]any{"send": true, "receive": true},
-		"history":       "on_pairing",
-		"chat_kinds":    []string{"direct", "group"},
-		"formatting":    "spans",
-		"identity":      map[string]any{"phone": true},
+		"pairing":         []string{"qr", "code"},
+		"message_kinds":   []string{"text", "image", "video", "file"},
+		"media_max_bytes": 104857600,
+		"edit":            map[string]any{"window_s": 900},
+		"delete":          map[string]any{"window_s": 172800},
+		"reactions":       "one_per_user",
+		"replies":         true,
+		"threads":         false,
+		"receipts":        map[string]any{"send": true, "suppress": true},
+		"typing":          map[string]any{"send": true, "receive": true},
+		"history":         "on_pairing",
+		"chat_kinds":      []string{"direct", "group"},
+		"formatting":      "spans",
+		"identity":        map[string]any{"phone": true},
 	}
 }

@@ -111,6 +111,7 @@ pub struct Outgoing {
     pub chat: String,
     pub text: Text,
     pub reply_to: Option<String>,
+    pub media: Option<crate::protocol::Media>,
 }
 
 /// What `mark_read` found to acknowledge on the platform.
@@ -525,13 +526,22 @@ impl Store {
     // -----------------------------------------------------------------------------------------------------------
     // Outbox
 
-    pub fn queue(&self, chat: i64, text: &Text, reply_to: Option<&str>, client_id: &str) -> Result<i64> {
+    pub fn queue(
+        &self,
+        chat: i64,
+        text: &Text,
+        reply_to: Option<&str>,
+        media: Option<&crate::protocol::Media>,
+        client_id: &str,
+    ) -> Result<i64> {
         let spans = (!text.spans.is_empty()).then(|| serde_json::to_string(&text.spans)).transpose()?;
         let now = now_ms();
+        let kind = media.map_or("text", |m| m.kind.as_str());
+        let media = media.map(serde_json::to_string).transpose()?;
         self.conn.execute(
-            "INSERT INTO messages(chat, client_id, from_me, ts, kind, body, spans, reply_to, state)
-             VALUES (?1, ?2, 1, ?3, 'text', ?4, ?5, ?6, 'pending')",
-            params![chat, client_id, now, text.plain, spans, reply_to],
+            "INSERT INTO messages(chat, client_id, from_me, ts, kind, body, spans, reply_to, media, state)
+             VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, 'pending')",
+            params![chat, client_id, now, kind, text.plain, spans, reply_to, media],
         )?;
         let id = self.conn.last_insert_rowid();
         self.conn.execute("UPDATE chats SET last_ts = MAX(last_ts, ?2) WHERE id = ?1", params![chat, now])?;
@@ -581,7 +591,7 @@ impl Store {
     /// Messages still waiting for an account, oldest first.
     pub fn pending(&self, account: &str) -> Result<Vec<Outgoing>> {
         let mut stmt = self.conn.prepare(
-            "SELECT m.id, m.client_id, c.native_id, m.body, m.spans, m.reply_to FROM messages m JOIN chats c ON c.id = m.chat
+            "SELECT m.id, m.client_id, c.native_id, m.body, m.spans, m.reply_to, m.media FROM messages m JOIN chats c ON c.id = m.chat
              WHERE c.account = ?1 AND m.state = 'pending' ORDER BY m.id",
         )?;
         let rows = stmt.query_map([account], |r| {
@@ -592,6 +602,7 @@ impl Store {
                 chat: r.get(2)?,
                 text: Text { plain: r.get(3)?, spans: spans.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default() },
                 reply_to: r.get(5)?,
+                media: r.get::<_, Option<String>>(6)?.and_then(|m| serde_json::from_str(&m).ok()),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -901,7 +912,7 @@ mod tests {
     fn outbox_goes_pending_sent_then_read() {
         let (store, key) = store_with_account();
         let chat = store.upsert_chat(&key, &Chat { id: "paul".into(), ..Default::default() }).unwrap();
-        let id = store.queue(chat, &Text::plain("hello"), None, "c1").unwrap();
+        let id = store.queue(chat, &Text::plain("hello"), None, None, "c1").unwrap();
         assert_eq!(store.pending(&key).unwrap().len(), 1);
         assert_eq!(store.sent("c1", "n1", 5).unwrap(), Some(id));
         assert!(store.pending(&key).unwrap().is_empty());
@@ -911,17 +922,38 @@ mod tests {
     }
 
     #[test]
+    fn a_queued_file_keeps_its_media_for_the_outbox_and_the_window() {
+        let (store, key) = store_with_account();
+        let chat = store.upsert_chat(&key, &Chat { id: "paul".into(), ..Default::default() }).unwrap();
+        let media = crate::protocol::Media {
+            kind: "image".into(),
+            mime: Some("image/png".into()),
+            name: Some("a.png".into()),
+            size: Some(12),
+            reference: String::new(),
+            path: Some("/tmp/fim-a.png".into()),
+        };
+        let id = store.queue(chat, &Text::plain("look"), None, Some(&media), "c1").unwrap();
+        let pending = store.pending(&key).unwrap();
+        assert_eq!(pending[0].media.as_ref().map(|m| m.path.clone()), Some(Some("/tmp/fim-a.png".into())));
+        let view = store.message_view(id).unwrap().unwrap();
+        assert_eq!(view["kind"], "image");
+        assert_eq!(view["media"]["path"], "/tmp/fim-a.png");
+        assert_eq!(view["text"]["plain"], "look", "the text is the caption");
+    }
+
+    #[test]
     fn an_echo_before_the_reply_does_not_duplicate() {
         let (store, key) = store_with_account();
         let chat = store.upsert_chat(&key, &Chat { id: "paul".into(), ..Default::default() }).unwrap();
-        store.queue(chat, &Text::plain("hello"), None, "c1").unwrap();
+        store.queue(chat, &Text::plain("hello"), None, None, "c1").unwrap();
         // Echo without client_id (another code path), then the reply.
         store.put_message(&key, &msg("n1", "paul", None, 5, "hello"), true).unwrap();
         let kept = store.sent("c1", "n1", 5).unwrap().unwrap();
         assert_eq!(store.messages(chat, None, 10).unwrap().len(), 1);
         assert_eq!(store.message_view(kept).unwrap().unwrap()["client_id"], "c1");
         // Echo with client_id: matched to the pending row.
-        store.queue(chat, &Text::plain("again"), None, "c2").unwrap();
+        store.queue(chat, &Text::plain("again"), None, None, "c2").unwrap();
         let mut echo = msg("n2", "paul", None, 6, "again");
         echo.client_id = Some("c2".into());
         store.put_message(&key, &echo, true).unwrap();

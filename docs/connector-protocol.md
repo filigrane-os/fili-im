@@ -194,7 +194,7 @@ Non-fatal, logged and shown in the footer.
 |---|---|---|---|
 | `pair` | `method`, `phone` (for `code`) | `{}` then `pairing` events | `pairing` |
 | `logout` | | `{}`; the connector forgets its session | |
-| `send` | `chat`, `client_id`, `text`, `reply_to`, `media` `{path, kind, mime, name}` | `{id, timestamp}` | `message_kinds`, `replies` |
+| `send` | `chat`, `client_id`, `text` (the caption when there is a `media`), `reply_to`, `media` `{path, kind, mime, name}` (`kind`: `image`, `video` or `file`; the daemon copies the user's file and passes that copy) | `{id, timestamp}` | `message_kinds`, `replies` |
 | `edit` | `chat`, `message`, `text` | `{}` | `edit` |
 | `delete` | `chat`, `message`, `for_everyone` | `{}` | `delete` |
 | `react` | `chat`, `message`, `emoji` (empty removes) | `{}` | `reactions` |

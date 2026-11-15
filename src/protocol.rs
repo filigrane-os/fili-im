@@ -228,6 +228,9 @@ pub struct Media {
     pub size: Option<u64>,
     #[serde(rename = "ref", default)]
     pub reference: String,
+    /// Outgoing only: the local file to send (and, once sent, the copy the window shows).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 fn text_kind() -> String {

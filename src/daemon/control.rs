@@ -71,6 +71,17 @@ async fn client(daemon: Arc<Daemon>, stream: UnixStream) {
                 forwarder = Some(tokio::spawn(forward(daemon.events.subscribe(), out.clone())));
             }
             Ok(json!({}))
+        } else if method == "media.fetch" {
+            // A download can take minutes: answered from its own task so the connection keeps serving other requests.
+            let (daemon, out) = (daemon.clone(), out.clone());
+            tokio::spawn(async move {
+                let reply = match fetch_media(&daemon, &params).await {
+                    Ok(result) => json!({"reply": id, "ok": true, "result": result}),
+                    Err(e) => json!({"reply": id, "ok": false, "error": e}),
+                };
+                let _ = out.send(reply.to_string()).await;
+            });
+            continue;
         } else {
             call(&daemon, &method, &params).await
         };
@@ -208,7 +219,12 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
         "send" => {
             let chat = int_param(params, "chat")?;
             let reply_to = params.get("reply_to").and_then(Value::as_str).map(str::to_owned);
-            daemon.send(chat, text_param(params)?, reply_to)
+            let text = if params.contains_key("text") { text_param(params)? } else { Text::plain("") };
+            let media = match params.get("media") {
+                Some(Value::Object(m)) => Some(outgoing_media(daemon, chat, m)?),
+                _ => None,
+            };
+            daemon.send(chat, text, reply_to, media)
         }
         "message.retry" => {
             let id = int_param(params, "message")?;
@@ -309,4 +325,99 @@ async fn act(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) ->
     }
     daemon.message_changed(id);
     Ok(json!({}))
+}
+
+/// MIME type from a file name, for the few kinds the window offers (the connector sniffs the content when it is empty).
+fn mime_of(name: &str) -> Option<&'static str> {
+    let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "pdf" => "application/pdf",
+        _ => return None,
+    })
+}
+
+/// A file the user picked, as an outgoing media: copied next to the account's media (so a retry still finds it after the
+/// original moves), kind from its type.
+fn outgoing_media(daemon: &Arc<Daemon>, chat: i64, params: &Map<String, Value>) -> Result<crate::protocol::Media, ErrorBody> {
+    let source = std::path::PathBuf::from(str_param(params, "path")?);
+    let meta = std::fs::metadata(&source).map_err(|e| ErrorBody::new("invalid", format!("cannot read the file: {e}")))?;
+    if !meta.is_file() {
+        return Err(invalid("not a file"));
+    }
+    let name = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
+    let mime = params.get("mime").and_then(Value::as_str).map(str::to_owned).or_else(|| mime_of(&name).map(str::to_owned));
+    let kind = match mime.as_deref() {
+        Some(m) if m.starts_with("image/") && m != "image/gif" => "image",
+        Some(m) if m.starts_with("video/") => "video",
+        _ => "file",
+    };
+    let account = daemon.store.lock().unwrap().chat_ref(chat).map_err(internal)?.map(|(a, _, _)| a);
+    let account = account.ok_or_else(|| ErrorBody::new("not_found", "no such conversation"))?;
+    let dir = paths::media_dir(&account).join("out");
+    paths::private_dir(&dir).map_err(|e| ErrorBody::new("failed", format!("cannot create {}: {e}", dir.display())))?;
+    let stored = dir.join(format!("{}-{}", crate::store::now_ms(), name.replace('/', "_")));
+    std::fs::copy(&source, &stored).map_err(|e| ErrorBody::new("failed", format!("cannot copy the file: {e}")))?;
+    Ok(crate::protocol::Media {
+        kind: kind.into(),
+        mime,
+        name: Some(name),
+        size: Some(meta.len()),
+        reference: String::new(),
+        path: Some(stored.display().to_string()),
+    })
+}
+
+/// `media.fetch {message}`: the local file of a message's media, downloaded through the connector the first time.
+async fn fetch_media(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
+    let id = int_param(params, "message")?;
+    let (view, found) = {
+        let store = daemon.store.lock().unwrap();
+        (store.message_view(id).map_err(internal)?, store.message_ref(id).map_err(internal)?)
+    };
+    let media = view.as_ref().and_then(|v| v.get("media")).filter(|m| m.is_object()).cloned();
+    let Some(media) = media else { return Err(ErrorBody::new("not_found", "this message has no file")) };
+    // Sent from here: the copy made for sending is the file
+    if let Some(path) = media.get("path").and_then(Value::as_str)
+        && std::path::Path::new(path).is_file()
+    {
+        return Ok(json!({"path": path}));
+    }
+    let Some((account, chat, native)) = found else { return Err(ErrorBody::new("not_found", "no such message")) };
+    let name = media.get("name").and_then(Value::as_str).unwrap_or("");
+    let ext = std::path::Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+        .or_else(|| match media.get("mime").and_then(Value::as_str) {
+            Some("image/jpeg") => Some("jpg".into()),
+            Some("image/png") => Some("png".into()),
+            Some("image/webp") => Some("webp".into()),
+            Some("video/mp4") => Some("mp4".into()),
+            Some("audio/ogg") | Some("audio/ogg; codecs=opus") => Some("ogg".into()),
+            Some("application/pdf") => Some("pdf".into()),
+            _ => None,
+        })
+        .unwrap_or_else(|| "bin".into());
+    let dir = paths::media_dir(&account).join("in");
+    paths::private_dir(&dir).map_err(|e| ErrorBody::new("failed", format!("cannot create {}: {e}", dir.display())))?;
+    let stem: String = if name.is_empty() { format!("{id}") } else { format!("{id}-{}", name.replace('/', "_")) };
+    let dest = if name.is_empty() { dir.join(format!("{stem}.{ext}")) } else { dir.join(stem) };
+    if dest.is_file() {
+        return Ok(json!({"path": dest.display().to_string()}));
+    }
+    let conn = daemon.connector(&account).ok_or_else(|| ErrorBody::new("not_connected", "the account is not running"))?;
+    let mut args = Map::new();
+    args.insert("chat".into(), json!(chat));
+    args.insert("message".into(), json!(native));
+    args.insert("ref".into(), media.get("ref").cloned().unwrap_or(json!(native)));
+    args.insert("dest".into(), json!(dest.display().to_string()));
+    conn.command("fetch_media", args, Duration::from_secs(300)).await?;
+    Ok(json!({"path": dest.display().to_string()}))
 }
