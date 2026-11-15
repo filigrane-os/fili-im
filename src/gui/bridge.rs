@@ -56,6 +56,9 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "uiSet"]
         fn ui_set(self: &Conversations, key: &QString, value: &QString);
+        // The emoji list of the keyboard panel ("😀 grinning face (face-smiling)" per line), empty when missing
+        #[qinvokable]
+        fn emojis(self: &Conversations) -> QString;
         // Translation of a text written in English
         #[qinvokable]
         fn tr(self: &Conversations, text: &QString) -> QString;
@@ -225,6 +228,14 @@ impl qobject::Conversations {
 
     pub fn footer(&self) -> bool {
         crate::window_parts::shown_now("footer")
+    }
+
+    pub fn emojis(&self) -> QString {
+        let path = std::env::var("FILI_EMOJI")
+            .ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::var("HOME").ok().map(|h| std::path::Path::new(&h).join(".local/share/menu/emoji.txt")));
+        QString::from(path.and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default().as_str())
     }
 
     pub fn ui_get(&self, key: &QString) -> QString {

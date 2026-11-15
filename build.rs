@@ -32,6 +32,7 @@ fn main() {
                 "qml/AboutCard.qml",
                 "qml/ShortcutsCard.qml",
                 "qml/SwitchCard.qml",
+                "qml/EmojiPicker.qml",
                 "qml/Icon.qml",
                 "qml/Field.qml",
                 "qml/IconButton.qml",

@@ -471,6 +471,12 @@ impl Store {
         Ok(Some(id))
     }
 
+    /// Delete for me: the message leaves this device only (nothing is sent to the platform).
+    pub fn forget_message(&self, id: i64) -> Result<bool> {
+        self.conn.execute("DELETE FROM reactions WHERE message = ?1", [id])?;
+        Ok(self.conn.execute("DELETE FROM messages WHERE id = ?1", [id])? > 0)
+    }
+
     /// `sender` None = me. An empty emoji removes the reaction.
     pub fn react(
         &self,

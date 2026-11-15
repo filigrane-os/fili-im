@@ -63,6 +63,7 @@
  "Discard": "Abandonner",
  "Document": "Document",
  "Download": "Télécharger",
+ "More": "Plus",
  "Download all": "Tout télécharger",
  "Downloading…": "Téléchargement…",
  "Draft": "Brouillon",
@@ -289,5 +290,10 @@
  "sending": "envoi",
  "signed out": "déconnecté",
  "unread": "non lus",
- "yourself": "vous-même"
+ "yourself": "vous-même",
+ "Delete for Me": "Supprimer pour moi",
+ "Forward to…": "Transférer à…",
+ "Message forwarded": "Message transféré",
+ "More emoji…": "Plus d’émojis…",
+ "Search emoji": "Chercher un émoji"
 }

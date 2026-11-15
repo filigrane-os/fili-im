@@ -118,21 +118,60 @@ Rectangle {
                 maxWidth: Math.min(560, list_.width * 0.78)
                 x: item.modelData.from_me ? list_.width - width - FiliTheme.margin : FiliTheme.margin
                 onMenu: (px, py) => {
-                    const m = item.modelData;
-                    const entries = [];
-                    if (view.caps.replies && !m.deleted) entries.push({ id: "reply", label: Conversations.tr("Reply") });
-                    if (m.text.plain !== "") entries.push({ id: "copy", label: Conversations.tr("Copy") });
-                    if (m.from_me && view.caps.edit && !m.deleted && m.kind === "text" && m.native_id) entries.push({ id: "edit", label: Conversations.tr("Edit…") });
-                    if (m.from_me && view.caps.delete && !m.deleted && m.native_id) entries.push({ id: "delete-all", label: Conversations.tr("Delete for Everyone"), danger: true });
-                    if (view.caps.reactions && view.caps.reactions !== "none" && m.native_id && !m.deleted)
-                        ["👍", "❤️", "😂", "😮", "😢", "🙏"].forEach(e => entries.push({ id: "react:" + e, label: Conversations.tr("React") + " " + e }));
-                    if (m.state === "failed") entries.push({ id: "retry", label: Conversations.tr("Send Again") });
-                    if (entries.length === 0) return;
-                    menu.message = m;
                     const p = bubble.mapToItem(view, px, py);
-                    menu.openAt(p.x, p.y, entries);
+                    view.openMenu(item.modelData, p.x, p.y, "all");
                 }
                 onRetry: win.rpc("message.retry", { message: item.modelData.id })
+            }
+            // Actions shown while the pointer is over the message, beside the bubble (towards the middle of the view)
+            HoverHandler { id: hover }
+            Rectangle {
+                id: tools
+                readonly property var m: item.modelData
+                visible: (hover.hovered || toolsHover.hovered) && !m.deleted
+                opacity: visible ? 1 : 0
+                height: 26
+                width: toolsRow.width + 4
+                radius: FiliTheme.radiusControl
+                color: FiliTheme.surface
+                border.width: FiliTheme.borderWidth
+                border.color: FiliTheme.border
+                y: bubble.y + 2
+                x: m.from_me ? bubble.x - width - FiliTheme.space1 : bubble.x + bubble.width + FiliTheme.space1
+                HoverHandler { id: toolsHover }
+                Row {
+                    id: toolsRow
+                    x: 2
+                    y: 1
+                    IconButton {
+                        visible: view.caps.replies
+                        name: "reply"
+                        tip: Conversations.tr("Reply")
+                        onClicked: { win.replyTo = tools.m; composer.focusInput(); }
+                    }
+                    IconButton {
+                        name: "forward"
+                        tip: Conversations.tr("Forward")
+                        onClicked: win.forwardMessage(tools.m)
+                    }
+                    IconButton {
+                        visible: view.canReact(tools.m)
+                        name: "smile"
+                        tip: Conversations.tr("React")
+                        onClicked: { const p = tools.mapToItem(view, 0, tools.height); view.openMenu(tools.m, p.x, p.y, "react"); }
+                    }
+                    IconButton {
+                        visible: tools.m.media !== null && tools.m.media !== undefined
+                        name: "download"
+                        tip: Conversations.tr("Download")
+                        onClicked: bubble.fetchMedia(true)
+                    }
+                    IconButton {
+                        name: "more"
+                        tip: Conversations.tr("More")
+                        onClicked: { const p = tools.mapToItem(view, 0, tools.height); view.openMenu(tools.m, p.x, p.y, "all"); }
+                    }
+                }
             }
         }
     }
@@ -153,14 +192,35 @@ Rectangle {
         lastMine: { for (let i = view.messages.length - 1; i >= 0; i--) if (view.messages[i].from_me && !view.messages[i].deleted && view.messages[i].kind === "text") return view.messages[i]; return null; }
     }
 
+    function canReact(m) { return caps.reactions && caps.reactions !== "none" && m.native_id && !m.deleted; }
+    // "react": the quick emojis and "More…"; "all": what the hover bar does not already offer
+    readonly property var quickEmojis: ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+    function openMenu(m, x, y, mode) {
+        const entries = [];
+        if (mode === "react") {
+            quickEmojis.forEach(e => entries.push({ id: "react:" + e, label: e }));
+            entries.push({ id: "react-more", label: Conversations.tr("More emoji…") });
+        } else {
+            if (m.text.plain !== "") entries.push({ id: "copy", label: Conversations.tr("Copy") });
+            if (m.from_me && caps.edit && !m.deleted && m.kind === "text" && m.native_id) entries.push({ id: "edit", label: Conversations.tr("Edit…") });
+            entries.push({ id: "delete-local", label: Conversations.tr("Delete for Me"), danger: true });
+            if (m.from_me && caps.delete && !m.deleted && m.native_id) entries.push({ id: "delete-all", label: Conversations.tr("Delete for Everyone"), danger: true });
+            if (m.state === "failed") entries.push({ id: "retry", label: Conversations.tr("Send Again") });
+        }
+        if (entries.length === 0) return;
+        menu.message = m;
+        menu.openAt(x, y, entries);
+    }
+
     PopupMenu {
         id: menu
         property var message: null
         onActivated: id => {
             const m = message;
-            if (id === "reply") { win.replyTo = m; composer.focusInput(); }
+            if (id === "react-more") win.pickEmoji(m);
             else if (id === "copy") Conversations.copyText(m.text.plain);
             else if (id === "edit") composer.startEdit(m);
+            else if (id === "delete-local") win.rpc("delete", { message: m.id, local: true }, () => { view.messages = view.messages.filter(x => x.id !== m.id); });
             else if (id === "delete-all") win.rpc("delete", { message: m.id, for_everyone: true });
             else if (id.startsWith("react:")) win.rpc("react", { message: m.id, emoji: id.slice(6) });
             else if (id === "retry") win.rpc("message.retry", { message: m.id });

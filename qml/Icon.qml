@@ -13,6 +13,11 @@ Item {
     height: size
 
     readonly property var paths: ({
+        "forward": "m15 17 5-5-5-5 M4 18v-2a4 4 0 0 1 4-4h12",
+        "reply": "M9 17 4 12l5-5 M20 18v-2a4 4 0 0 0-4-4H4",
+        "smile": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M8 14s1.5 2 4 2 4-2 4-2 M9 9h.01 M15 9h.01",
+        "download": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
+        "more": "M12 12h.01 M19 12h.01 M5 12h.01",
         "search": "m21 21-4.34-4.34 M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z",
         "minus": "M5 12h14",
         "x": "M18 6 6 18 M6 6l12 12",

@@ -61,6 +61,18 @@ ApplicationWindow {
         return a ? (a.self_name || a.name) : "";
     }
 
+    // ---- Message actions (hover bar) ----------------------------------------------------------------------------
+    // Forward: pick a destination, then send the text (and the file, downloaded first) there
+    function forwardMessage(m) { switchCard.show(m); }
+    function sendForward(m, chat) {
+        const send = media => rpc("send", { chat: chat, text: m.text.plain, media: media }, () => { notice = Conversations.tr("Message forwarded"); });
+        if (m.media) rpc("media.fetch", { message: m.id }, r => send({ path: r.path }));
+        else send(undefined);
+    }
+    // React with an emoji of the full list
+    property var emojiTarget: null
+    function pickEmoji(m) { emojiTarget = m; emojiPicker.show(); }
+
     // ---- Requests ---------------------------------------------------------------------------------------------
     property var pending: ({})
     function rpc(method, params, done, failed) {
@@ -353,5 +365,6 @@ ApplicationWindow {
     }
     AboutCard { id: aboutCard; anchors.fill: parent }
     ShortcutsCard { id: shortcutsCard; anchors.fill: parent }
-    SwitchCard { id: switchCard; anchors.fill: parent }
+    SwitchCard { id: switchCard; anchors.fill: parent; onForwardTo: (m, chat) => win.sendForward(m, chat) }
+    EmojiPicker { id: emojiPicker; anchors.fill: parent; onPicked: e => { if (win.emojiTarget) win.rpc("react", { message: win.emojiTarget.id, emoji: e }); } }
 }

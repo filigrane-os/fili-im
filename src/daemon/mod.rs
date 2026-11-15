@@ -201,6 +201,7 @@ impl Daemon {
             Event::State { state, detail, me, .. } => {
                 logged("state", store().set_state(key, state.as_str(), detail.as_deref(), me.as_ref()));
                 conn.set_connected(state == ConnState::Connected);
+                conn.set_phase(state);
                 self.account_changed(key);
                 if state == ConnState::Connected {
                     tokio::spawn(flush(self.clone(), conn.clone()));

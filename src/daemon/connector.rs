@@ -5,7 +5,7 @@
 //! supervisor is the one reading the reply.
 use super::Daemon;
 use crate::paths;
-use crate::protocol::{Capabilities, Command, ErrorBody, Incoming, Reply, parse_line};
+use crate::protocol::{Capabilities, Command, ConnState, ErrorBody, Incoming, Reply, parse_line};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -19,6 +19,8 @@ use tokio::sync::{oneshot, watch};
 const LOG_LIMIT: u64 = 1 << 20;
 const MAX_BACKOFF: u64 = 60;
 /// A connector that stayed up this long starts its back-off again from one second.
+/// A connector that stays `connecting` this long is killed and restarted (a hung socket does not recover by itself).
+const STUCK: Duration = Duration::from_secs(150);
 const STABLE: Duration = Duration::from_secs(60);
 
 pub struct Connector {
@@ -30,6 +32,8 @@ pub struct Connector {
     /// Set by `hello`, cleared when the process ends: no command goes out before it.
     caps: Mutex<Option<Capabilities>>,
     connected: AtomicBool,
+    /// Last reported state and when it began: a connector stuck in `connecting` is restarted (see `STUCK`).
+    phase: Mutex<(ConnState, Instant)>,
     stop: watch::Sender<bool>,
     /// One outbox flush at a time per account.
     pub flush: tokio::sync::Mutex<()>,
@@ -45,6 +49,7 @@ impl Connector {
             next: AtomicU64::new(1),
             caps: Mutex::new(None),
             connected: AtomicBool::new(false),
+            phase: Mutex::new((ConnState::Connecting, Instant::now())),
             stop: watch::channel(false).0,
             flush: tokio::sync::Mutex::new(()),
         })
@@ -52,6 +57,18 @@ impl Connector {
 
     pub fn is_connected(&self) -> bool {
         self.connected.load(Ordering::SeqCst)
+    }
+
+    pub fn set_phase(&self, state: ConnState) {
+        let mut phase = self.phase.lock().unwrap();
+        if phase.0 != state {
+            *phase = (state, Instant::now());
+        }
+    }
+
+    fn stuck(&self) -> bool {
+        let phase = self.phase.lock().unwrap();
+        phase.0 == ConnState::Connecting && phase.1.elapsed() > STUCK
     }
 
     pub fn set_connected(&self, connected: bool) {
@@ -204,8 +221,15 @@ pub async fn supervise(daemon: Arc<Daemon>, conn: Arc<Connector>) {
         *conn.stdin.lock().await = child.stdin.take();
         let mut lines = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
         let mut stopping = false;
+        *conn.phase.lock().unwrap() = (ConnState::Connecting, Instant::now());
+        let mut watchdog = tokio::time::interval(Duration::from_secs(15));
         loop {
             tokio::select! {
+                _ = watchdog.tick() => if conn.stuck() {
+                    eprintln!("fili-im: {}: still connecting after {}s; restarting the connector", conn.key, STUCK.as_secs());
+                    let _ = child.start_kill();
+                    *conn.phase.lock().unwrap() = (ConnState::Connecting, Instant::now());
+                },
                 line = lines.next_line() => match line {
                     Ok(Some(line)) => match parse_line(&line) {
                         Incoming::Reply(reply) => conn.route(reply),

@@ -300,6 +300,10 @@ pub(super) fn mark_read(daemon: &Arc<Daemon>, chat: i64, ask: Ask) -> Result<Val
 /// React, edit or delete a message the platform knows, then apply it here.
 async fn act(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -> Result<Value, ErrorBody> {
     let id = int_param(params, "message")?;
+    if method == "delete" && bool_param(params, "local") {
+        let removed = daemon.store.lock().unwrap().forget_message(id).map_err(internal)?;
+        return if removed { Ok(json!({})) } else { Err(ErrorBody::new("not_found", "no such message")) };
+    }
     let found = daemon.store.lock().unwrap().message_ref(id).map_err(internal)?;
     let Some((account, chat, native)) = found else {
         return Err(ErrorBody::new("not_found", "no such message (or not sent yet)"));

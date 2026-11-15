@@ -13,9 +13,15 @@ Rectangle {
         const all = win.chats;
         return (q === "" ? all : all.filter(c => c.title.toLowerCase().includes(q))).slice(0, 8);
     }
-    function show() { field.text = ""; index = 0; visible = true; field.forceActiveFocus(); }
+    // Forwarding: the card picks a destination for a message instead of opening the conversation
+    property var forwarding: null
+    signal forwardTo(var message, int chat)
+    function show(forwardMessage) { forwarding = forwardMessage || null; field.text = ""; index = 0; visible = true; field.forceActiveFocus(); }
     function choose(i) {
-        if (i >= 0 && i < matches.length) { win.openChat(matches[i].id); visible = false; }
+        if (i < 0 || i >= matches.length) return;
+        visible = false;
+        if (forwarding) forwardTo(forwarding, matches[i].id);
+        else win.openChat(matches[i].id);
     }
     MouseArea { anchors.fill: parent; onClicked: card.visible = false }
     Rectangle {
@@ -30,7 +36,7 @@ Rectangle {
         Field {
             id: field
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space3 }
-            placeholderText: Conversations.tr("Go to a conversation")
+            placeholderText: card.forwarding ? Conversations.tr("Forward to…") : Conversations.tr("Go to a conversation")
             onTextChanged: card.index = 0
             Keys.onEscapePressed: card.visible = false
             Keys.onReturnPressed: card.choose(card.index)

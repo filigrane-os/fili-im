@@ -211,10 +211,9 @@ Rectangle {
             }
         }
     }
-    MouseArea {
-        anchors.fill: parent
+    // Right click anywhere on the bubble (the text selection would swallow it in a MouseArea)
+    TapHandler {
         acceptedButtons: Qt.RightButton
-        z: -1
-        onClicked: mouse => b.menu(mouse.x, mouse.y)
+        onTapped: (point) => b.menu(point.position.x, point.position.y)
     }
 }
