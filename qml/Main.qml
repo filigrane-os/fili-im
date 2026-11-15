@@ -125,7 +125,7 @@ ApplicationWindow {
         replyTo = null;
         conversation.load();
         const c = chatById(id);
-        if (c && c.unread > 0) rpc("mark_read", { chat: id, receipt: false }, null, null);
+        if (c && c.unread > 0) rpc("mark_read", { chat: id, receipt: "auto" }, null, null);
     }
     function closeTab(id) {
         const i = tabs.indexOf(id);

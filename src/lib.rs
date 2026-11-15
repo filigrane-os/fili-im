@@ -4,6 +4,7 @@ pub mod client;
 pub mod ctl;
 pub mod daemon;
 pub mod paths;
+pub mod policy;
 pub mod protocol;
 pub mod store;
 pub mod window;

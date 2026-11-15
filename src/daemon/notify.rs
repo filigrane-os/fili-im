@@ -17,6 +17,27 @@ pub struct Notifier {
     recent: Mutex<VecDeque<Instant>>,
 }
 
+/// What the user chose on a notification.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Action {
+    Open,
+    Reply,
+    MarkRead,
+    Mute,
+}
+
+impl Action {
+    fn parse(name: &str) -> Option<Action> {
+        match name {
+            "default" => Some(Action::Open),
+            "reply" => Some(Action::Reply),
+            "read" => Some(Action::MarkRead),
+            "mute" => Some(Action::Mute),
+            _ => None,
+        }
+    }
+}
+
 enum Verdict {
     Show,
     Summary,
@@ -41,7 +62,10 @@ impl Notifier {
         }
     }
 
-    pub fn announce(&self, title: &str, body: &str) {
+    /// A notification for a message of conversation `chat`: one per conversation (a new one replaces the previous),
+    /// a click opens it, and three buttons: Reply, Mark as read, Mute for an hour. What the user picks comes back
+    /// through `act`.
+    pub fn announce(&self, chat: i64, title: &str, body: &str, act: impl Fn(Action) + Send + 'static) {
         if !self.enabled {
             return;
         }
@@ -51,15 +75,28 @@ impl Notifier {
             Verdict::Quiet => return,
         };
         tokio::spawn(async move {
-            let _ = tokio::process::Command::new("notify-send")
-                .args(["--app-name=Conversations", "--icon=fili-im", "--category=im.received", "--expire-time=8000", "--"])
+            let output = tokio::process::Command::new("notify-send")
+                .args(["--app-name=Conversations", "--icon=fili-im", "--category=im.received", "--expire-time=8000"])
+                .arg(format!("--hint=string:x-canonical-private-synchronous:fili-im-chat-{chat}"))
+                .args([
+                    "--action=default=Open",
+                    "--action=reply=Reply",
+                    "--action=read=Mark as read",
+                    "--action=mute=Mute for 1 hour",
+                    "--",
+                ])
                 .arg(title)
                 .arg(body)
                 .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .status()
+                .output()
                 .await;
+            if let Ok(output) = output
+                && let Some(action) = Action::parse(String::from_utf8_lossy(&output.stdout).trim())
+            {
+                // Showing a window waits for it to start: off the async workers
+                let _ = tokio::task::spawn_blocking(move || act(action)).await;
+            }
         });
     }
 }
@@ -126,6 +163,13 @@ mod tests {
             .collect();
         assert_eq!(verdicts, ["show", "show", "show", "summary", "quiet", "quiet"]);
         assert!(matches!(notifier.verdict(start + Duration::from_secs(30)), Verdict::Show));
+    }
+
+    #[test]
+    fn notification_buttons_map_to_actions() {
+        assert_eq!(Action::parse("default"), Some(Action::Open));
+        assert_eq!(Action::parse("mute"), Some(Action::Mute));
+        assert_eq!(Action::parse(""), None, "a dismissed notification does nothing");
     }
 
     #[test]

@@ -301,7 +301,7 @@ impl Daemon {
     }
 
     /// A desktop notification for a new incoming message, unless its chat is muted.
-    fn announce(&self, chat: i64, message: &crate::protocol::Message) {
+    fn announce(self: &Arc<Self>, chat: i64, message: &crate::protocol::Message) {
         let Ok(Some(view)) = self.store.lock().unwrap().chat(chat) else { return };
         if view["muted"].as_bool().unwrap_or(false) {
             return;
@@ -314,7 +314,33 @@ impl Daemon {
             (Some("direct"), _) | (_, None) => line,
             (_, Some(sender)) => format!("{sender}: {line}"),
         };
-        self.notifier.announce(&title, &line);
+        let daemon = self.clone();
+        self.notifier.announce(chat, &title, &line, move |action| daemon.on_notification(chat, action));
+    }
+
+    /// The user answered a notification: show the conversation, mark it read, or mute it for an hour.
+    fn on_notification(self: &Arc<Self>, chat: i64, action: notify::Action) {
+        use notify::Action;
+        match action {
+            Action::Open | Action::Reply => {
+                let mut actions = vec![format!("open-chat:{chat}")];
+                if action == Action::Reply {
+                    actions.push("focus-composer".into());
+                }
+                crate::ctl::show_window(&actions);
+            }
+            Action::MarkRead => {
+                let _ = control::mark_read(self, chat, crate::policy::Ask::Explicit);
+            }
+            Action::Mute => {
+                let until = crate::store::now_ms() + 3_600_000;
+                let done = self.store.lock().unwrap().mute(chat, until);
+                if done.is_ok() {
+                    self.chat_changed(chat);
+                    self.refresh_alerts();
+                }
+            }
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------

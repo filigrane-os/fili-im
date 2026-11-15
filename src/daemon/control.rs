@@ -5,6 +5,7 @@
 //! (`{"event": "message", …}`); a client that falls behind gets `{"event": "resync"}` and reloads its lists.
 use super::Daemon;
 use crate::paths;
+use crate::policy::Ask;
 use crate::protocol::{ErrorBody, Text};
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
@@ -239,7 +240,16 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
             }
             Ok(json!({}))
         }
-        "mark_read" => mark_read(daemon, int_param(params, "chat")?, bool_param(params, "receipt")),
+        "mark_read" => {
+            // `receipt`: true = the user said "mark as read", "auto" = the conversation was opened (the policy decides),
+            // absent or false = read here only (a peek)
+            let ask = match params.get("receipt") {
+                Some(Value::Bool(true)) => Ask::Explicit,
+                Some(Value::String(s)) if s == "auto" => Ask::Auto,
+                _ => Ask::No,
+            };
+            mark_read(daemon, int_param(params, "chat")?, ask)
+        }
         "react" | "edit" | "delete" => act(daemon, method, params).await,
         "search" => Ok(Value::Array(store().search(str_param(params, "query")?, limit(params, 50)).map_err(internal)?)),
         "shutdown" => {
@@ -252,13 +262,13 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
 
 /// Read here; with `receipt`, also tell the platform (only where it can, and only when asked: the receipt policy of
 /// phase P3 decides when the window asks).
-fn mark_read(daemon: &Arc<Daemon>, chat: i64, receipt: bool) -> Result<Value, ErrorBody> {
+pub(super) fn mark_read(daemon: &Arc<Daemon>, chat: i64, ask: Ask) -> Result<Value, ErrorBody> {
     let mark = daemon.store.lock().unwrap().mark_read(chat).map_err(internal)?;
     let Some(mark) = mark else { return Err(ErrorBody::new("not_found", "no such conversation")) };
     daemon.chat_changed(chat);
     daemon.refresh_alerts();
     let caps = daemon.store.lock().unwrap().capabilities(&mark.account).map_err(internal)?;
-    let acknowledged = receipt && caps.receipts.send && !mark.messages.is_empty();
+    let acknowledged = crate::policy::receipts(&mark.account, chat).sends(ask) && caps.receipts.send && !mark.messages.is_empty();
     if acknowledged && let Some(conn) = daemon.connector(&mark.account) {
         // Group chats acknowledge per sender (WhatsApp does); a direct chat has one.
         let mut by_sender: Vec<(Option<String>, Vec<String>)> = Vec::new();

@@ -125,6 +125,30 @@ pub fn focus_existing() -> bool {
     true
 }
 
+/// Run window actions in the open window, starting the window first when there is none (a notification was clicked
+/// while Conversations was closed). Waits a few seconds for the new window's control socket.
+pub fn show_window(actions: &[String]) {
+    if target(None).is_none() {
+        let Ok(exe) = std::env::current_exe() else { return };
+        let _ = std::process::Command::new(exe)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        for _ in 0..50 {
+            if target(None).is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        // The window loads its list before it can open a conversation
+        std::thread::sleep(Duration::from_millis(1200));
+    }
+    for action in actions {
+        let _ = run(&["action".to_string(), action.clone()]);
+    }
+}
+
 const USAGE: &str = "usage: fili-im ctl [--pid PID] action NAME | actions";
 
 /// `fili-im ctl ...` (arguments after `ctl`): prints the JSON answer; Err carries the reason.

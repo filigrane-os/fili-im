@@ -48,7 +48,7 @@ Rectangle {
         if (i >= 0) copy[i] = m; else copy.push(m);
         messages = copy;
         if (atEnd) list_.positionViewAtEnd();
-        if (!m.from_me && i < 0 && win.active) win.rpc("mark_read", { chat: m.chat, receipt: false });
+        if (!m.from_me && i < 0 && win.active) win.rpc("mark_read", { chat: m.chat, receipt: "auto" });
     }
     function byNative(id) { return messages.find(m => m.native_id === id) || null; }
     function focusComposer() { composer.focusInput(); }
