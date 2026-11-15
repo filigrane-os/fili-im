@@ -10,6 +10,9 @@ Rectangle {
     property var chat
     property var caps
     property var lastMine: null
+    signal platformMenu(real x, real y)
+    // In the view of all the conversations of a person: which platform the message goes to
+    readonly property bool choosing: win.grouped && win.scope === 0
     property var editing: null
     // Files waiting to go with the next message: [{path, name}]
     property var files: []
@@ -113,8 +116,26 @@ Rectangle {
         onClicked: picker.open()
     }
     Rectangle {
+        id: target
+        visible: c.choosing && c.chat !== null
+        anchors { left: attach.right; leftMargin: FiliTheme.space1; bottom: parent.bottom; bottomMargin: FiliTheme.space2 + 4 }
+        width: visible ? 46 : 0
+        height: 24
+        radius: FiliTheme.radiusControl
+        color: targetArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
+        Rectangle {
+            anchors { left: parent.left; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+            width: 16; height: 16; radius: 8
+            color: c.chat ? win.platformColor(win.platformOf(c.chat)) : "transparent"
+            Text { anchors.centerIn: parent; text: c.chat ? win.platformName(win.platformOf(c.chat)).charAt(0) : ""; font.pixelSize: 10; font.bold: true; color: "white" }
+        }
+        Text { anchors { right: parent.right; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter } text: "▾"; color: FiliTheme.muted }
+        MouseArea { id: targetArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { const p = target.mapToItem(c, 0, 0); c.platformMenu(p.x, p.y); } }
+        ToolTip { visible: targetArea.containsMouse; delay: 600; text: Conversations.tr("Send on…") }
+    }
+    Rectangle {
         id: field
-        anchors { left: attach.right; right: parent.right; bottom: parent.bottom; leftMargin: FiliTheme.space1; rightMargin: FiliTheme.margin; bottomMargin: FiliTheme.space2 }
+        anchors { left: target.visible ? target.right : attach.right; right: parent.right; bottom: parent.bottom; leftMargin: FiliTheme.space1; rightMargin: FiliTheme.margin; bottomMargin: FiliTheme.space2 }
         height: input.height
         radius: FiliTheme.radiusControl
         color: FiliTheme.surface

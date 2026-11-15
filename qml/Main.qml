@@ -52,6 +52,58 @@ ApplicationWindow {
         return chats.filter(c => f === "all" || (f === "unread" ? c.unread > 0 : f === "account:" + c.account));
     }
     function chatById(id) { return chats.find(c => c.id === id) || null; }
+
+    // ---- One person, several platforms -----------------------------------------------------------------------
+    // Direct conversations with the same name on different accounts are one person (until contacts are linked by hand):
+    // one row, one tab, with a view of all of them mixed ("All conversations") or of one platform
+    readonly property var groupMap: {
+        const byTitle = {};
+        chats.forEach(c => { if (c.kind === "direct" && c.title.trim() !== "") { const k = c.title.trim().toLowerCase(); (byTitle[k] = byTitle[k] || []).push(c); } });
+        const map = {};
+        for (const k in byTitle) {
+            const list = byTitle[k];
+            if (new Set(list.map(c => c.account)).size < 2) continue;
+            const ids = list.map(c => c.id).sort((a, b) => a - b);
+            ids.forEach(id => { map[id] = ids; });
+        }
+        return map;
+    }
+    function groupIds(id) { return groupMap[id] || [id]; }
+    function canon(id) { return groupIds(id)[0]; }
+    readonly property var group: groupIds(current).map(chatById).filter(c => c)
+    readonly property bool grouped: group.length > 1
+    property int scope: 0                 // 0 = all the conversations of the person, else one chat
+    property int targetPick: 0            // platform chosen by hand for the next message (All view)
+    function scopeIds() { return grouped && scope !== 0 ? [scope] : groupIds(current); }
+    readonly property int lastMessageChat: { const m = conversation.messages; return m.length ? m[m.length - 1].chat : current; }
+    // Where a message goes: the chat being viewed; in the All view the chosen platform, else where the last message was
+    readonly property var targetChat: {
+        if (!grouped) return chatById(current);
+        if (scope !== 0) return chatById(scope);
+        const ids = groupIds(current);
+        return chatById(ids.includes(targetPick) ? targetPick : (ids.includes(lastMessageChat) ? lastMessageChat : current));
+    }
+    function setScope(s) { scope = s; targetPick = 0; replyTo = null; conversation.load(); }
+    function groupUnread(id) { return groupIds(id).reduce((n, x) => { const c = chatById(x); return n + (c && c.unread > 0 ? c.unread : 0); }, 0); }
+    // The list: a person with several conversations is one row (the latest message, all the unread)
+    readonly property var rows: {
+        const base = visibleChats;
+        if (filter.startsWith("account:")) return base;
+        const seen = {};
+        const out = [];
+        for (const c of base) {
+            const ids = groupIds(c.id);
+            if (ids.length === 1) { out.push(c); continue; }
+            if (seen[ids[0]]) continue;
+            seen[ids[0]] = true;
+            const members = ids.map(chatById).filter(x => x);
+            const latest = members.reduce((a, b) => b.last_ts > a.last_ts ? b : a);
+            out.push(Object.assign({}, chatById(ids[0]), {
+                unread: members.reduce((n, m) => n + (m.unread > 0 ? m.unread : 0), 0), last: latest.last, last_ts: latest.last_ts,
+                muted: members.every(m => m.muted), pinned: members.some(m => m.pinned), members: members }));
+        }
+        return out;
+    }
     function accountByKey(key) { return accounts.find(a => a.key === key) || null; }
     function capsOf(chat) { const a = chat ? accountByKey(chat.account) : null; return a && a.capabilities ? a.capabilities : {}; }
     function filterTitle() {
@@ -149,7 +201,7 @@ ApplicationWindow {
             copy.sort((a, b) => (b.pinned - a.pinned) || (b.last_ts - a.last_ts) || (b.id - a.id));
             chats = copy;
         } else if (e.event === "message") {
-            if (e.message.chat === current) conversation.apply(e.message);
+            if (scopeIds().includes(e.message.chat)) conversation.apply(e.message);
         } else if (e.event === "presence") {
             presence = e.state;
         } else if (e.event === "account") {
@@ -169,12 +221,14 @@ ApplicationWindow {
 
     // ---- Conversations and tabs ---------------------------------------------------------------------------
     function openChat(id) {
+        id = canon(id);
         if (!tabs.includes(id)) tabs = tabs.concat([id]);
         current = id;
+        scope = 0;
+        targetPick = 0;
         replyTo = null;
         conversation.load();
-        const c = chatById(id);
-        if (c && c.unread > 0) rpc("mark_read", { chat: id, receipt: "auto" }, null, null);
+        groupIds(id).forEach(x => { const c = chatById(x); if (c && c.unread > 0) rpc("mark_read", { chat: x, receipt: "auto" }, null, null); });
     }
     function closeTab(id) {
         const i = tabs.indexOf(id);
@@ -188,7 +242,7 @@ ApplicationWindow {
         openChat(tabs[(i + step + tabs.length) % tabs.length]);
     }
     function cycleChat(step) {
-        const list = visibleChats;
+        const list = rows;
         if (!list.length) return;
         const i = list.findIndex(c => c.id === current);
         openChat(list[Math.max(0, Math.min(list.length - 1, i + step))].id);

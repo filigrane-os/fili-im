@@ -7,6 +7,9 @@ Rectangle {
     property var message
     property var quoted: null
     property bool showSender: false
+    // The platform the message came or went through, when several are mixed
+    property bool showPlatform: false
+    readonly property string platform: showPlatform ? win.platformOf(win.chatById(message.chat)) : ""
     property real maxWidth: 480
     signal menu(real x, real y)
     signal retry()
@@ -335,6 +338,13 @@ Rectangle {
             id: foot
             x: content.width - width
             spacing: FiliTheme.space2
+            Rectangle {
+                visible: b.platform !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14; height: 14; radius: 7
+                color: win.platformColor(b.platform)
+                Text { anchors.centerIn: parent; text: win.platformName(b.platform).charAt(0); font.pixelSize: 9; font.bold: true; color: "white" }
+            }
             Text {
                 visible: b.failed
                 text: Conversations.tr("Send again")

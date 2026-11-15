@@ -23,7 +23,7 @@ Rectangle {
         return (m.from_me ? Conversations.tr("You") + ": " : (c.kind !== "direct" && m.sender_name ? m.sender_name + ": " : "")) + body;
     }
     readonly property bool searching: win.query !== ""
-    readonly property var rows: searching ? win.results : win.visibleChats
+    readonly property var rows: searching ? win.results : win.rows
 
     ListView {
         id: view
@@ -45,9 +45,10 @@ Rectangle {
                 id: mark
                 anchors { left: parent.left; leftMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
                 size: 36
-                chatId: row.hit ? modelData.chat : modelData.id
+                chatId: row.hit ? win.canon(modelData.chat) : modelData.id
                 title: row.hit ? (modelData.chat_title || "?") : modelData.title
-                platform: win.multi && row.chat ? win.platformOf(row.chat) : ""
+                platforms: win.multi && row.chat ? (row.chat.members ? row.chat.members.map(m => win.platformOf(m)) : [win.platformOf(row.chat)]) : []
+                alts: row.chat ? win.groupIds(row.chat.id).filter(x => x !== row.chat.id) : []
             }
             Text {
                 anchors { left: mark.right; leftMargin: FiliTheme.space3; right: when.left; rightMargin: FiliTheme.space2; top: parent.top; topMargin: 10 }

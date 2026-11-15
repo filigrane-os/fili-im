@@ -11,9 +11,13 @@ Rectangle {
     property bool loading: false
     // Messages received while the view was scrolled up, counted on the "latest messages" button
     property int unseen: 0
-    readonly property var chat: win.chatById(win.current)
+    // `person`: who the view is about (the first conversation of the person); `chat`: where a message goes
+    readonly property var person: win.chatById(win.current)
+    readonly property var chat: win.targetChat
     readonly property var caps: win.capsOf(chat)
-    readonly property bool group: chat ? chat.kind !== "direct" : false
+    readonly property bool group: person ? person.kind !== "direct" : false
+    function capsFor(m) { return win.capsOf(win.chatById(m.chat)); }
+    function sortMessages(list) { return list.sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id)); }
 
     function toLatest() {
         list_.positionViewAtEnd();
@@ -26,35 +30,51 @@ Rectangle {
         unseen = 0;
         more = false;
         if (!win.current) return;
-        const id = win.current;
+        const id = win.current, scope = win.scope, ids = win.scopeIds();
         loading = true;
-        win.rpc("messages.list", { chat: id, limit: 60 }, list => {
+        let waiting = ids.length, acc = [], anyMore = false;
+        const done = () => {
+            if (--waiting > 0) return;
             loading = false;
-            if (id !== win.current) return;
-            messages = list;
-            more = list.length >= 60;
+            if (id !== win.current || scope !== win.scope) return;
+            messages = sortMessages(acc);
+            more = anyMore;
             list_.positionViewAtEnd();
-        }, () => { loading = false; });
+        };
+        // Every conversation of the person is read and mixed by date
+        ids.forEach(cid => win.rpc("messages.list", { chat: cid, limit: 60 }, list => {
+            acc = acc.concat(list);
+            if (list.length >= 60) anyMore = true;
+            done();
+        }, done));
     }
     function loadEarlier() {
         if (loading || messages.length === 0) return;
-        const id = win.current;
+        const id = win.current, scope = win.scope, ids = win.scopeIds();
         loading = true;
         const first = messages[0].timestamp;
-        win.rpc("messages.list", { chat: id, before: first, limit: 60 }, list => {
+        let waiting = ids.length, acc = [], anyMore = false;
+        const done = () => {
+            if (--waiting > 0) return;
             loading = false;
-            if (id !== win.current) return;
+            if (id !== win.current || scope !== win.scope) return;
             const keep = list_.contentHeight - list_.contentY;
-            messages = list.concat(messages);
-            more = list.length >= 60;
+            messages = sortMessages(acc.concat(messages));
+            more = anyMore;
             list_.contentY = list_.contentHeight - keep;
-        }, () => { loading = false; });
+        };
+        ids.forEach(cid => win.rpc("messages.list", { chat: cid, before: first, limit: 60 }, list => {
+            acc = acc.concat(list);
+            if (list.length >= 60) anyMore = true;
+            done();
+        }, done));
     }
     function apply(m) {
         const atEnd = list_.atYEnd;
         const i = messages.findIndex(x => x.id === m.id);
         const copy = messages.slice();
         if (i >= 0) copy[i] = m; else copy.push(m);
+        if (i < 0) sortMessages(copy);
         messages = copy;
         if (atEnd) list_.positionViewAtEnd();
         else if (!m.from_me && i < 0) unseen++;
@@ -87,24 +107,26 @@ Rectangle {
     // Who it is: picture and name, a click opens the contact card
     Rectangle {
         id: head
-        visible: win.current !== 0 && view.chat !== null
+        visible: win.current !== 0 && view.person !== null
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: visible ? 48 : 0
+        height: visible ? (win.grouped ? 68 : 48) : 0
         color: FiliTheme.background
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
         Avatar {
             id: headAvatar
             anchors { left: parent.left; leftMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
             size: 34
-            chatId: view.chat ? view.chat.id : 0
-            title: view.chat ? view.chat.title : ""
-            platform: win.multi ? win.platformOf(view.chat) : ""
+            chatId: view.person ? view.person.id : 0
+            title: view.person ? view.person.title : ""
+            platform: win.multi && !win.grouped ? win.platformOf(view.person) : ""
+            platforms: win.grouped ? win.group.map(c => win.platformOf(c)) : []
+            alts: win.groupIds(win.current).filter(x => x !== win.current)
         }
         Column {
             anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
             Text {
                 width: parent.width
-                text: view.chat ? view.chat.title : ""
+                text: view.person ? view.person.title : ""
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 font.family: FiliTheme.font
@@ -113,16 +135,55 @@ Rectangle {
                 color: FiliTheme.text
             }
             Text {
-                visible: win.multi
+                visible: win.multi && !win.grouped
                 width: parent.width
-                text: view.chat ? win.platformName(win.platformOf(view.chat)) : ""
+                text: view.person ? win.platformName(win.platformOf(view.person)) : ""
                 elide: Text.ElideRight
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeSmall
                 color: FiliTheme.muted
             }
+            // One person on several platforms: All conversations (mixed), then one chip per platform
+            Row {
+                visible: win.grouped
+                spacing: FiliTheme.space2
+                Repeater {
+                    model: win.grouped ? [0].concat(win.group.map(c => c.id)) : []
+                    Rectangle {
+                        required property int modelData
+                        readonly property var chatOf: modelData === 0 ? null : win.chatById(modelData)
+                        readonly property bool on: win.scope === modelData
+                        height: 24
+                        width: chipRow.width + 2 * FiliTheme.space3
+                        radius: FiliTheme.radiusControl
+                        color: on ? FiliTheme.surfaceActive : chipArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
+                        border.width: FiliTheme.borderWidth
+                        border.color: on ? FiliTheme.accentColor : FiliTheme.border
+                        Row {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: FiliTheme.space1 + 2
+                            Rectangle {
+                                visible: parent.parent.chatOf !== null
+                                width: 14; height: 14; radius: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: parent.parent.chatOf ? win.platformColor(win.platformOf(parent.parent.chatOf)) : "transparent"
+                                Text { anchors.centerIn: parent; text: parent.parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.parent.chatOf)).charAt(0) : ""; font.pixelSize: 9; font.bold: true; color: "white" }
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.chatOf)) : Conversations.tr("All conversations")
+                                font.family: FiliTheme.font
+                                font.pixelSize: FiliTheme.sizeList
+                                color: FiliTheme.text
+                            }
+                        }
+                        MouseArea { id: chipArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.setScope(modelData) }
+                    }
+                }
+            }
         }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.chat) win.showContact(view.chat) }
+        MouseArea { z: -1; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
     }
 
     ListView {
@@ -165,6 +226,7 @@ Rectangle {
                 id: bubble
                 y: (item.newDay ? 34 : 0) + (item.sameSender ? 0 : 6)
                 message: item.modelData
+                showPlatform: win.scope === 0 && win.grouped
                 showSender: view.group && !item.modelData.from_me && !item.sameSender
                 quoted: item.modelData.reply_to ? view.byNative(item.modelData.reply_to) : null
                 maxWidth: Math.min(560, list_.width * 0.78)
@@ -198,10 +260,10 @@ Rectangle {
                     x: 2
                     y: 1
                     IconButton {
-                        visible: view.caps.replies
+                        visible: view.capsFor(tools.m).replies
                         name: "reply"
                         tip: Conversations.tr("Reply")
-                        onClicked: { win.replyTo = tools.m; composer.focusInput(); }
+                        onClicked: { win.targetPick = tools.m.chat; win.replyTo = tools.m; composer.focusInput(); }
                     }
                     IconButton {
                         name: "forward"
@@ -277,10 +339,11 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         chat: view.chat
         caps: view.caps
+        onPlatformMenu: (x, y) => { const p = composer.mapToItem(view, x, y); menu.message = null; menu.openAt(p.x, p.y - 10 - win.group.length * 26, win.group.map(c => ({ id: "target:" + c.id, label: (c.id === win.targetChat.id ? "● " : "○ ") + win.platformName(win.platformOf(c)) }))); }
         lastMine: { for (let i = view.messages.length - 1; i >= 0; i--) if (view.messages[i].from_me && !view.messages[i].deleted && view.messages[i].kind === "text") return view.messages[i]; return null; }
     }
 
-    function canReact(m) { return caps.reactions && caps.reactions !== "none" && m.native_id && !m.deleted; }
+    function canReact(m) { const c = capsFor(m); return c.reactions && c.reactions !== "none" && m.native_id && !m.deleted; }
     // "react": the quick emojis and "More…"; "all": what the hover bar does not already offer
     readonly property var quickEmojis: ["👍", "❤️", "😂", "😮", "😢", "🙏"]
     function openMenu(m, x, y, mode) {
@@ -290,9 +353,9 @@ Rectangle {
             entries.push({ id: "react-more", label: Conversations.tr("More emoji…") });
         } else {
             if (m.text.plain !== "") entries.push({ id: "copy", label: Conversations.tr("Copy") });
-            if (m.from_me && caps.edit && !m.deleted && m.kind === "text" && m.native_id) entries.push({ id: "edit", label: Conversations.tr("Edit…") });
+            if (m.from_me && capsFor(m).edit && !m.deleted && m.kind === "text" && m.native_id) entries.push({ id: "edit", label: Conversations.tr("Edit…") });
             entries.push({ id: "delete-local", label: Conversations.tr("Delete for Me"), danger: true });
-            if (m.from_me && caps.delete && !m.deleted && m.native_id) entries.push({ id: "delete-all", label: Conversations.tr("Delete for Everyone"), danger: true });
+            if (m.from_me && capsFor(m).delete && !m.deleted && m.native_id) entries.push({ id: "delete-all", label: Conversations.tr("Delete for Everyone"), danger: true });
             if (m.state === "failed") entries.push({ id: "retry", label: Conversations.tr("Send Again") });
         }
         if (entries.length === 0) return;
@@ -305,6 +368,7 @@ Rectangle {
         property var message: null
         onActivated: id => {
             const m = message;
+            if (id.startsWith("target:")) { win.targetPick = parseInt(id.slice(7)); composer.focusInput(); return; }
             if (id === "react-more") win.pickEmoji(m);
             else if (id === "copy") Conversations.copyText(m.text.plain);
             else if (id === "edit") composer.startEdit(m);
