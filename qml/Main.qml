@@ -293,13 +293,14 @@ ApplicationWindow {
     // ---- Body --------------------------------------------------------------------------------------------------
     Sidebar {
         id: sidebar
+        visible: win.width >= 760
         anchors { top: toolbar.bottom; bottom: footer.top; left: parent.left }
-        width: FiliTheme.sidebarWidth
+        width: visible ? FiliTheme.sidebarWidth : 0
     }
     ChatList {
         id: chatList
         anchors { top: toolbar.bottom; bottom: footer.top; left: sidebar.right }
-        width: 320
+        width: Math.max(240, Math.min(320, win.width * 0.3))
     }
     Item {
         anchors { top: toolbar.bottom; bottom: footer.top; left: chatList.right; right: parent.right }

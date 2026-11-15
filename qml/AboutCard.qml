@@ -55,7 +55,7 @@ Rectangle {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Conversations.tr("The mail client of Filigrane")
+                text: Conversations.tr("Instant messaging for Filigrane")
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.size
                 font.weight: Font.Light

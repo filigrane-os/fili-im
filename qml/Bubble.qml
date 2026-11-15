@@ -22,7 +22,17 @@ Rectangle {
     }
     readonly property string body: message.deleted ? Conversations.tr("Message deleted") : message.text.plain
 
-    width: Math.min(maxWidth, Math.max(content.implicitWidth, foot.implicitWidth) + 2 * FiliTheme.space3)
+    // The bubble is as wide as its widest line (text measured unwrapped), up to maxWidth; everything inside follows it
+    readonly property real innerWidth: Math.min(maxWidth - 2 * FiliTheme.space3, Math.max(probe.implicitWidth, foot.implicitWidth, b.showSender ? senderLabel.implicitWidth : 0, b.mediaLabel !== "" ? mediaLabelItem.implicitWidth : 0, 60))
+    width: innerWidth + 2 * FiliTheme.space3
+    Text {
+        id: probe
+        visible: false
+        text: b.body
+        textFormat: Text.PlainText
+        font.family: FiliTheme.font
+        font.pixelSize: FiliTheme.size
+    }
     height: content.height + 2 * FiliTheme.space2
     radius: FiliTheme.radiusWindow
     color: mine ? FiliTheme.surfaceActive : FiliTheme.surface
@@ -36,6 +46,7 @@ Rectangle {
         width: b.width - 2 * FiliTheme.space3
         spacing: 2
         Text {
+            id: senderLabel
             visible: b.showSender
             width: parent.width
             text: b.message.sender_name || b.message.sender || ""
@@ -69,6 +80,7 @@ Rectangle {
             }
         }
         Text {
+            id: mediaLabelItem
             visible: b.mediaLabel !== ""
             text: "▣ " + b.mediaLabel
             width: parent.width
