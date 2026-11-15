@@ -33,6 +33,7 @@ fn main() {
                 "qml/ShortcutsCard.qml",
                 "qml/SwitchCard.qml",
                 "qml/EmojiPicker.qml",
+                "qml/QuickLook.qml",
                 "qml/Icon.qml",
                 "qml/Field.qml",
                 "qml/IconButton.qml",
@@ -43,7 +44,8 @@ fn main() {
             .qml_file(QmlFile::from("qml/FiliTheme.qml").singleton(true))
             .depend("QtQuick")
             .depend("QtQuick.Controls")
-            .depend("QtQuick.Dialogs"),
+            .depend("QtQuick.Dialogs")
+            .depend("QtMultimedia"),
     )
     // Fonts of the interface travel with the binary: the application looks the same on any distribution
     .qrc_resources([

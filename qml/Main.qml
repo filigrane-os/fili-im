@@ -69,6 +69,8 @@ ApplicationWindow {
         if (m.media) rpc("media.fetch", { message: m.id }, r => send({ path: r.path }));
         else send(undefined);
     }
+    // Quick Look on the media of the open conversation
+    function quickLook(id) { quickLookCard.open(conversation.messages, id); }
     // React with an emoji of the full list
     property var emojiTarget: null
     function pickEmoji(m) { emojiTarget = m; emojiPicker.show(); }
@@ -366,5 +368,6 @@ ApplicationWindow {
     AboutCard { id: aboutCard; anchors.fill: parent }
     ShortcutsCard { id: shortcutsCard; anchors.fill: parent }
     SwitchCard { id: switchCard; anchors.fill: parent; onForwardTo: (m, chat) => win.sendForward(m, chat) }
+    QuickLook { id: quickLookCard; anchors.fill: parent }
     EmojiPicker { id: emojiPicker; anchors.fill: parent; onPicked: e => { if (win.emojiTarget) win.rpc("react", { message: win.emojiTarget.id, emoji: e }); } }
 }

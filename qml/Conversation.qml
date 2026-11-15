@@ -163,8 +163,8 @@ Rectangle {
                     IconButton {
                         visible: tools.m.media !== null && tools.m.media !== undefined
                         name: "download"
-                        tip: Conversations.tr("Download")
-                        onClicked: bubble.fetchMedia(true)
+                        tip: Conversations.tr("Open")
+                        onClicked: win.quickLook(tools.m.id)
                     }
                     IconButton {
                         name: "more"

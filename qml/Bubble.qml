@@ -129,7 +129,7 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: b.mediaPath === "" ? b.fetchMedia(true) : Conversations.openUrl("file://" + encodeURI(b.mediaPath)) }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         // Video, document, voice message: a chip (click downloads and opens it)
         Rectangle {
@@ -166,7 +166,7 @@ Rectangle {
                     color: FiliTheme.muted
                 }
             }
-            MouseArea { id: chipArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: b.fetchMedia(true) }
+            MouseArea { id: chipArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         TextEdit {
             visible: b.body !== ""
