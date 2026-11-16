@@ -65,7 +65,7 @@ Rectangle {
         };
         reveal();
     }
-    Timer { id: settle; interval: 8000; onTriggered: { list_.settling = false; if (list_.follow) list_.toEnd(); } }
+    Timer { id: settle; interval: 5000; onTriggered: { list_.settling = false; if (list_.follow) list_.toEnd(); } }
     Timer { id: flash; interval: 2200; onTriggered: view.highlightId = 0 }
     Timer { id: findDelay; interval: 250; onTriggered: view.runFind() }
     function capsFor(m) { return win.capsOf(win.chatById(m.chat)); }
@@ -73,6 +73,10 @@ Rectangle {
 
     function toLatest() {
         list_.follow = true;
+        // The model is replaced on every change: the delegates are rebuilt with estimated heights, and the position
+        // would be lost on the way. Stay at the end until the user scrolls (or a few seconds pass).
+        list_.settling = true;
+        settle.restart();
         list_.toEnd();
         // The delegates under the end have estimated heights until they are built: settle once they are
         Qt.callLater(() => list_.toEnd());
@@ -93,8 +97,6 @@ Rectangle {
             messages = sortMessages(acc);
             more = anyMore;
             toLatest();
-            list_.settling = true;   // heights keep changing while the delegates and pictures are built: stay at the end
-            settle.restart();
         };
         // Every conversation of the person is read and mixed by date
         ids.forEach(cid => win.rpc("messages.list", { chat: cid, limit: 60 }, list => {
