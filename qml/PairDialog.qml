@@ -88,6 +88,9 @@ Rectangle {
                             for (let x = 0; x < n; x++)
                                 if (dialog.rows[y][x] === "1") ctx.fillRect(Math.floor((x + quiet) * cell), Math.floor((y + quiet) * cell), Math.ceil(cell), Math.ceil(cell));
                     }
+                    // Painted again when it appears (the dialog first opens without a code) and when the code changes
+                    onVisibleChanged: if (visible) requestPaint()
+                    onAvailableChanged: if (available) requestPaint()
                     Connections { target: dialog; function onRowsChanged() { requestPaint(); } }
                 }
             }

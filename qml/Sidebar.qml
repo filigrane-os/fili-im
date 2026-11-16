@@ -18,7 +18,7 @@ Rectangle {
     }
     function pairFirst() {
         const a = win.accounts.find(x => x.state === "needs_pairing" || x.state === "logged_out");
-        if (a) win.rpc("account.pair", { account: a.key });
+        if (a) win.startPairing(a.key);
     }
     // With several platforms the account is named by its platform (and by its owner when a platform has two accounts)
     function accountLabel(a) {
