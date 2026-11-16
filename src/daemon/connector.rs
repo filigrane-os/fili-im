@@ -92,6 +92,15 @@ impl Connector {
         if params.contains_key("id") || params.contains_key("cmd") {
             return Err(ErrorBody::new("invalid", format!("{cmd}: parameters cannot be named id or cmd")));
         }
+        // A connector just started (an account just added) has not said hello yet: give it a few seconds.
+        for attempt in 0..80 {
+            if self.caps.lock().unwrap().is_some() || self.stopped() {
+                break;
+            }
+            if attempt < 79 {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
         {
             let caps = self.caps.lock().unwrap();
             let Some(caps) = caps.as_ref() else {
