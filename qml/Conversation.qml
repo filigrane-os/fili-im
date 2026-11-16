@@ -58,6 +58,7 @@ Rectangle {
         };
         reveal();
     }
+    Timer { id: settle; interval: 8000; onTriggered: { list_.settling = false; if (list_.follow) list_.toEnd(); } }
     Timer { id: flash; interval: 2200; onTriggered: view.highlightId = 0 }
     Timer { id: findDelay; interval: 250; onTriggered: view.runFind() }
     function capsFor(m) { return win.capsOf(win.chatById(m.chat)); }
@@ -65,9 +66,9 @@ Rectangle {
 
     function toLatest() {
         list_.follow = true;
-        list_.positionViewAtEnd();
+        list_.toEnd();
         // The delegates under the end have estimated heights until they are built: settle once they are
-        Qt.callLater(() => list_.positionViewAtEnd());
+        Qt.callLater(() => list_.toEnd());
         unseen = 0;
     }
     function load() {
@@ -84,8 +85,9 @@ Rectangle {
             if (id !== win.current || scope !== win.scope) return;
             messages = sortMessages(acc);
             more = anyMore;
-            list_.follow = true;
-            list_.positionViewAtEnd();
+            toLatest();
+            list_.settling = true;   // heights keep changing while the delegates and pictures are built: stay at the end
+            settle.restart();
         };
         // Every conversation of the person is read and mixed by date
         ids.forEach(cid => win.rpc("messages.list", { chat: cid, limit: 60 }, list => {
@@ -313,14 +315,24 @@ Rectangle {
         topMargin: FiliTheme.space3
         bottomMargin: FiliTheme.space3
         spacing: 2
-        KineticScroll {}
+        KineticScroll { id: kinetic }
+        // The first touch of the user ends the "stay at the end" of a freshly opened conversation
+        Connections { target: kinetic; function onWheel() { list_.settling = false; } }
+        onMovementStarted: settling = false
         onAtYEndChanged: if (atYEnd) view.unseen = 0
         // The view stays at the bottom while the composer grows (long text, reply bar, files) or messages come in,
         // as long as it was at the bottom: `follow` changes only when the content moves (the user scrolls)
+        // positionViewAtEnd() stops short of the bottom margin (the last bubble then touches the composer and the view
+        // is not "at the end"): go to the real end, margin included
+        function toEnd() {
+            positionViewAtEnd();
+            contentY = Math.max(originY, originY + contentHeight - height + bottomMargin);
+        }
         property bool follow: true
-        onContentYChanged: follow = atYEnd
-        onHeightChanged: if (follow) positionViewAtEnd()
-        onContentHeightChanged: if (follow) Qt.callLater(positionViewAtEnd)
+        property bool settling: false   // just after a conversation opens: the end is kept whatever the estimated heights do
+        onContentYChanged: if (!settling) follow = atYEnd
+        onHeightChanged: if (follow) toEnd()
+        onContentHeightChanged: if (follow || settling) Qt.callLater(toEnd)
         header: Item {
             width: list_.width
             height: view.more ? 32 : 0

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-11-16
+
+- A conversation opens at the very bottom (margin included) and stays there while its pictures and previews load,
+  until you scroll.
+- Packaging: `make install` (programs, desktop entry, icon, licenses) and `package.env` for Filigrane's xbps package
+  and `bootstrap.sh`.
+
 ## 0.1.0 - 2026-11-16
 
 First release: WhatsApp and Google Messages in one window.
