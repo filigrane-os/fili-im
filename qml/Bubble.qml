@@ -4,6 +4,7 @@ import Fili.Im
 
 Rectangle {
     id: b
+    readonly property int lineHeightPercent: 120   // line spacing of the message text (a little looser than the font default)
     property var message
     property var quoted: null
     property bool showSender: false
@@ -420,11 +421,12 @@ Rectangle {
             width: parent.width
             // The text sits apart from the preview above it
             topPadding: b.card || b.ogShown || b.videoLink || b.hasMedia ? FiliTheme.space2 : 0
-            text: b.body
+            // TextEdit has no lineHeight: the plain text goes through a rich-text paragraph that sets it
+            text: "<p style=\"margin:0; white-space:pre-wrap; line-height:" + b.lineHeightPercent + "%\">" + b.body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</p>"
             readOnly: true
             selectByMouse: true
             wrapMode: TextEdit.Wrap
-            textFormat: TextEdit.PlainText
+            textFormat: TextEdit.RichText
             selectionColor: FiliTheme.surfaceHover
             selectedTextColor: FiliTheme.text
             font.family: FiliTheme.font
