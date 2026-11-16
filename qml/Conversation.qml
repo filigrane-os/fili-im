@@ -7,6 +7,15 @@ Rectangle {
     id: view
     color: FiliTheme.background
     property var messages: []
+    // The list shows a ListModel kept in step with `messages`: a message that comes in or changes is inserted or set in
+    // place, so the delegates already built stay as they are (replacing a whole array rebuilds them all and the view jumps)
+    property bool incremental: false
+    ListModel { id: msgModel; dynamicRoles: true }
+    function rebuildModel() {
+        msgModel.clear();
+        messages.forEach(m => msgModel.append({ msg: m }));
+    }
+    onMessagesChanged: if (!incremental) rebuildModel()
     property bool more: false
     property bool loading: false
     // Messages received while the view was scrolled up, counted on the "latest messages" button
@@ -134,9 +143,13 @@ Rectangle {
         const atEnd = nearEnd || (m.from_me && !messages.some(x => x.id === m.id));
         const i = messages.findIndex(x => x.id === m.id);
         const copy = messages.slice();
-        if (i >= 0) copy[i] = m; else copy.push(m);
-        if (i < 0) sortMessages(copy);
+        let at = i;
+        if (i >= 0) copy[i] = m;
+        else { copy.push(m); sortMessages(copy); at = copy.indexOf(m); }
+        incremental = true;
         messages = copy;
+        incremental = false;
+        if (i >= 0) msgModel.set(at, { msg: m }); else msgModel.insert(at, { msg: m });
         if (atEnd) toLatest();
         else if (!m.from_me && i < 0) unseen++;
         if (!m.from_me && i < 0 && win.active) win.rpc("mark_read", { chat: m.chat, receipt: "auto" });
@@ -319,7 +332,7 @@ Rectangle {
         visible: win.current !== 0
         anchors { top: findBar.visible ? findBar.bottom : head.bottom; left: parent.left; right: parent.right; bottom: composer.top }
         clip: true
-        model: view.messages
+        model: msgModel
         boundsBehavior: Flickable.StopAtBounds
         topMargin: FiliTheme.space3
         bottomMargin: FiliTheme.space3
@@ -352,7 +365,8 @@ Rectangle {
             id: item
             // The hovered message (and its action bar) is drawn above the others, whatever the order they were built in
             z: hover.hovered || toolsHover.hovered ? 100 : 1
-            required property var modelData
+            required property var msg
+            readonly property var modelData: msg
             required property int index
             readonly property var previous: index > 0 ? view.messages[index - 1] : null
             readonly property bool newDay: !previous || new Date(previous.timestamp).toDateString() !== new Date(modelData.timestamp).toDateString()
