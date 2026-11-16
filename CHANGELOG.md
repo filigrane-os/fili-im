@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Clicking a quoted message (a reply) goes to the original message and flashes it.
+- Pictures in a message are shown in cover mode: a tall picture fills its box (cropped) instead of floating in black
+  bars; Quick Look still shows the whole picture.
+
 ## 0.1.1 - 2026-11-16
 
 - A conversation opens at the very bottom (margin included) and stays there while its pictures and previews load,

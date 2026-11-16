@@ -7,6 +7,7 @@ Rectangle {
     readonly property int lineHeightPercent: 120   // line spacing of the message text (a little looser than the font default)
     property var message
     property var quoted: null
+    signal quoteClicked()
     property bool showSender: false
     // The platform the message came or went through, when several are mixed
     property bool showPlatform: false
@@ -158,6 +159,8 @@ Rectangle {
             color: FiliTheme.alpha(FiliTheme.background, 0.4)
             radius: FiliTheme.radiusControl
             Rectangle { width: 2; height: parent.height; color: FiliTheme.accentColor }
+            // Click: go to the original message
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: b.quoteClicked() }
             Text {
                 id: quote
                 x: FiliTheme.space2
@@ -194,7 +197,7 @@ Rectangle {
                 cache: true
                 autoTransform: true
                 sourceSize.width: 640
-                fillMode: Image.PreserveAspectFit
+                fillMode: Image.PreserveAspectCrop   // cover: a tall picture fills the box (cropped) instead of floating in black bars
             }
             AnimatedImage {
                 id: anim
@@ -205,7 +208,7 @@ Rectangle {
                 cache: true
                 playing: visible
                 sourceSize.width: 640
-                fillMode: Image.PreserveAspectFit
+                fillMode: Image.PreserveAspectCrop   // cover: a tall picture fills the box (cropped) instead of floating in black bars
             }
             Rectangle {
                 visible: b.isVideo && picture.shown.status === Image.Ready

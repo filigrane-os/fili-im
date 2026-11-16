@@ -43,16 +43,23 @@ Rectangle {
     // Show hit i: older pages are loaded until it is there, then the view centres on it
     function jumpTo(i) {
         const hit = hits[i];
-        if (!hit) return;
+        if (hit) revealMessage(hit.id);
+    }
+    // Go to a message (a search hit, the original of a quote): older pages are loaded until it is there, then the view
+    // centres on it and it flashes
+    function revealMessage(id) {
         const show = () => {
-            const at = messages.findIndex(m => m.id === hit.id);
+            const at = messages.findIndex(m => m.id === id);
             if (at < 0) return;
+            list_.follow = false;
+            list_.settling = false;
             list_.positionViewAtIndex(at, ListView.Center);
-            highlightId = hit.id;
+            Qt.callLater(() => list_.positionViewAtIndex(at, ListView.Center));   // once the delegates around it have their real heights
+            highlightId = id;
             flash.restart();
         };
         const reveal = () => {
-            if (messages.findIndex(m => m.id === hit.id) >= 0) show();
+            if (messages.findIndex(m => m.id === id) >= 0) show();
             else if (more && !loading) loadEarlier(reveal);
             else if (loading) Qt.callLater(reveal);
         };
@@ -374,6 +381,7 @@ Rectangle {
                     view.openMenu(item.modelData, p.x, p.y, "all");
                 }
                 onRetry: win.rpc("message.retry", { message: item.modelData.id })
+                onQuoteClicked: if (bubble.quoted) view.revealMessage(bubble.quoted.id)
             }
             // The platform of the message, on its left (the views that mix several)
             Rectangle {
