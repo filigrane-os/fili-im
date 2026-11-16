@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2026-11-16
+
+- `make release` builds only the `fili-im` program of the package (the packaging CI could not link `fili-im-fake`).
+
 ## 0.1.2 - 2026-11-16
 
 - A conversation view that stays put: messages go through a ListModel updated in place (no rebuild of every bubble

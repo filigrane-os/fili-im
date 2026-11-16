@@ -19,7 +19,8 @@ build: connectors
 	cargo build
 
 release: connectors-release
-	cargo build --release
+	# the packaged build skips fili-im-fake (a development tool that needs no GUI objects)
+	cargo build --release --locked --bin fili-im
 
 connectors:
 	mkdir -p target/debug
