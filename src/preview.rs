@@ -318,6 +318,25 @@ fn playable(stream: &str) -> String {
 
 /// Ask yt-dlp about a video page (YouTube, Instagram, TikTok, Vimeo… whatever it knows).
 pub fn resolve_video(url: &str) -> Value {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+    // The same page asked again soon (the bubble, then Quick Look) is not looked up again: stream addresses last hours
+    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, Value)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((at, found)) = cache.lock().unwrap().get(url)
+        && at.elapsed() < Duration::from_secs(15 * 60)
+    {
+        return found.clone();
+    }
+    let found = resolve_video_now(url);
+    if found.get("stream").is_some() {
+        cache.lock().unwrap().insert(url.to_string(), (Instant::now(), found.clone()));
+    }
+    found
+}
+
+fn resolve_video_now(url: &str) -> Value {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return json!({"error": "not a web address"});
     }

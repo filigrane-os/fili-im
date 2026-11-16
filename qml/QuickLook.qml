@@ -45,6 +45,7 @@ Rectangle {
     property int startAt: 0   // where a video page continues from (ms), when opened from a playing bubble
     function open(messages, id, at) {
         startAt = at || 0;
+        win.stopInline();
         const list = [];
         for (const m of messages) {
             if (m.deleted) continue;
@@ -59,7 +60,7 @@ Rectangle {
         forceActiveFocus();
         ensure(index);
     }
-    function close() { player.stop(); visible = false; }
+    function close() { player.stop(); pageVideo.stop(); visible = false; }
     function go(step) {
         const i = index + step;
         if (i < 0 || i >= items.length) return;
@@ -265,6 +266,7 @@ Rectangle {
         }
         // A video page (YouTube, Instagram, TikTok…): played here, full size, once its stream is found
         VideoLink {
+            id: pageVideo
             anchors.fill: parent
             visible: ql.isPage
             url: ql.isPage ? ql.current.url : ""

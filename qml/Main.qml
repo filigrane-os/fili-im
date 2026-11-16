@@ -217,7 +217,10 @@ ApplicationWindow {
     function showContact(chat) { contactCard.show(); }
     // Quick Look on the media of the open conversation
     readonly property bool overlayOpen: quickLookCard.visible || contactCard.visible || switchCard.visible || emojiPicker.visible || aboutCard.visible || shortcutsCard.visible || pairDialog.visible || ctxMenu.visible || statusMenu.visible
-    function quickLook(id, at) { quickLookCard.open(conversation.messages, id, at || 0); }
+    // Where each video page was left in a bubble (ms): Quick Look continues from there; opening it stops the bubbles
+    property var videoPositions: ({})
+    signal stopInline()
+    function quickLook(id, at) { quickLookCard.open(conversation.messages, id, at !== undefined ? at : (videoPositions[id] || 0)); }
     // React with an emoji of the full list
     property var emojiTarget: null
     function pickEmoji(m) { emojiTarget = m; emojiPicker.show(); }

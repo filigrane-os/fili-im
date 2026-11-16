@@ -290,6 +290,8 @@ Rectangle {
                 poster: b.card ? "https://i.ytimg.com/vi/" + b.ytId + "/mqdefault.jpg" : ""
                 compact: true
                 onExpand: at => win.quickLook(b.message.id, at)
+                onPositionChanged: if (position > 0) win.videoPositions[b.message.id] = position
+                Connections { target: win; function onStopInline() { ytThumb.pause(); } }
             }
             Text {
                 id: titleText
@@ -335,6 +337,7 @@ Rectangle {
                 width: parent.width
                 // A page that is a video (Instagram, TikTok, Vimeo…): the picture plays it in place
                 VideoLink {
+                    id: ogVideo
                     visible: b.siteVideo
                     width: parent.width
                     height: visible ? Math.round(width * 9 / 16) : 0
@@ -342,6 +345,8 @@ Rectangle {
                     poster: b.og.image || ""
                     compact: true
                     onExpand: at => win.quickLook(b.message.id, at)
+                    onPositionChanged: if (position > 0) win.videoPositions[b.message.id] = position
+                    Connections { target: win; function onStopInline() { ogVideo.pause(); } }
                 }
                 Image {
                     visible: !b.siteVideo && b.og.image !== undefined && status !== Image.Error

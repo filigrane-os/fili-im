@@ -31,6 +31,7 @@ Item {
         if (phase === "idle" || phase === "error") start();
         else if (playing) player.pause(); else player.play();
     }
+    function pause() { player.pause(); }
     function stop() { player.stop(); player.source = ""; phase = "idle"; }
     onUrlChanged: { player.stop(); player.source = ""; phase = "idle"; if (autoplay && url !== "") start(); }
     Component.onCompleted: if (autoplay && url !== "") start()
