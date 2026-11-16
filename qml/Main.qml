@@ -182,9 +182,9 @@ ApplicationWindow {
         });
     }
     // The pairing dialog opens at once (waiting for the code), then shows what the daemon sends
-    function startPairing(key) {
+    function startPairing(key, method) {
         pairDialog.show({ account: key, kind: "wait", data: "" });
-        rpc("account.pair", { account: key }, null, e => { pairDialog.hide(); notice = (e && e.message) || Conversations.tr("The request failed"); });
+        rpc("account.pair", method ? { account: key, method: method } : { account: key }, null, e => { pairDialog.hide(); notice = (e && e.message) || Conversations.tr("The request failed"); });
     }
     function linkAccount(platform) { rpc("account.add", { platform: platform }, a => startPairing(a.key)); }
     function openInboxMenu(x, y) {

@@ -144,7 +144,7 @@ func (o *Out) Reply(id uint64, result any, err *ErrorBody) {
 
 func capabilities() map[string]any {
 	return map[string]any{
-		"pairing":         []string{"qr"},
+		"pairing":         []string{"oauth", "qr"},
 		"message_kinds":   []string{"text", "image", "video", "file"},
 		"media_max_bytes": 104857600,
 		"delete":          map[string]any{},

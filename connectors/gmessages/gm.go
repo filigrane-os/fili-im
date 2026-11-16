@@ -42,8 +42,7 @@ type Connector struct {
 	client   *libgm.Client
 	auth     *libgm.AuthData
 	pairing  context.CancelFunc // set while a QR pairing runs
-	lastQR   string
-	syncedAt string // session id of the last sync
+	syncedAt string             // session id of the last sync
 	syncing  bool
 
 	convs    sync.Map // conversation id -> *gmproto.Conversation
@@ -524,10 +523,7 @@ func (c *Connector) Run(cmd *Command) (any, error) {
 	defer cancel()
 	switch cmd.Cmd {
 	case "pair":
-		if cmd.Method != "" && cmd.Method != "qr" {
-			return nil, fail("invalid", "only QR pairing is available")
-		}
-		return nil, c.pair()
+		return nil, c.pair(cmd.Method)
 	case "logout":
 		return nil, c.logout(ctx)
 	case "shutdown":
@@ -738,41 +734,113 @@ func (c *Connector) fetchMedia(ctx context.Context, cli *libgm.Client, cmd *Comm
 	return map[string]any{"path": cmd.Dest}, nil
 }
 
-// pair links this computer like a browser: a QR code to scan from Google Messages > Device pairing, renewed every
-// 30 seconds until the phone confirms.
-func (c *Connector) pair() error {
+// stopPairing ends a pairing in progress (a new one starts, or the user cancelled): nothing is kept.
+func (c *Connector) stopPairing() {
 	c.mu.Lock()
-	if c.pairing != nil {
-		qr := c.lastQR
-		c.mu.Unlock()
-		if qr != "" {
-			c.out.Event("pairing", map[string]any{"kind": "qr", "data": qr, "expires_s": int(qrLifetime.Seconds())})
-		}
-		return nil
+	cancel, cli := c.pairing, c.client
+	c.pairing, c.client = nil, nil
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
-	if c.client != nil {
-		c.client.SetEventHandler(nil)
-		c.client.Disconnect()
-		c.client = nil
+	if cli != nil {
+		cli.SetEventHandler(nil)
+		cli.Disconnect()
 	}
+}
+
+// pair links this computer. "oauth": sign in to Google in a browser window, then confirm an emoji on the phone (the
+// way Google Messages for web works now). "qr": the old QR code, renewed every 30 seconds, for phones that still
+// have the scanner.
+func (c *Connector) pair(method string) error {
+	if method != "qr" && method != "oauth" && method != "" {
+		return fail("invalid", "pairing by %q is not available", method)
+	}
+	c.stopPairing()
+	ctx, cancel := context.WithCancel(context.Background())
 	ad := libgm.NewAuthData()
 	cli := c.newClient(ad)
-	ctx, cancel := context.WithCancel(context.Background())
+	c.mu.Lock()
 	c.client, c.auth, c.pairing = cli, nil, cancel
 	c.mu.Unlock()
+	if method == "qr" {
+		return c.pairQR(ctx, cancel, cli)
+	}
+	go c.pairGoogle(ctx, cancel, cli, ad)
+	return nil
+}
+
+func (c *Connector) pairFailed(cancel context.CancelFunc, cli *libgm.Client, detail string) {
+	cancel()
+	c.mu.Lock()
+	mine := c.client == cli
+	if mine {
+		c.pairing, c.client = nil, nil
+	}
+	c.mu.Unlock()
+	cli.SetEventHandler(nil)
+	cli.Disconnect()
+	if mine {
+		c.out.State("needs_pairing", detail, nil)
+	}
+}
+
+func (c *Connector) pairGoogle(ctx context.Context, cancel context.CancelFunc, cli *libgm.Client, ad *libgm.AuthData) {
+	c.out.Event("pairing", map[string]any{"kind": "browser", "data": ""})
+	loginCtx, stop := context.WithTimeout(ctx, 15*time.Minute)
+	defer stop()
+	cookies, err := googleCookies(loginCtx, filepath.Dir(c.path))
+	if err != nil {
+		c.log.Warn().Err(err).Msg("Google sign-in failed")
+		c.pairFailed(cancel, cli, "Google sign-in did not finish: "+err.Error())
+		return
+	}
+	ad.SetCookies(cookies)
 	if err := cli.FetchConfig(ctx); err != nil {
-		cancel()
-		c.mu.Lock()
-		c.pairing = nil
-		c.mu.Unlock()
+		c.pairFailed(cancel, cli, "Cannot reach Google Messages: "+err.Error())
+		return
+	}
+	emoji, session, err := cli.StartGaiaPairing(ctx, ctx)
+	if err != nil {
+		detail := "Cannot start the pairing: " + err.Error()
+		switch {
+		case errors.Is(err, libgm.ErrNoDevicesFound):
+			detail = "No phone with Google Messages was found on this Google account"
+		case errors.Is(err, libgm.ErrPairingInitTimeout):
+			detail = "The phone did not answer; open Google Messages on it and try again"
+		}
+		c.pairFailed(cancel, cli, detail)
+		return
+	}
+	c.out.Event("pairing", map[string]any{"kind": "emoji", "data": emoji, "expires_s": 120})
+	phoneID, err := cli.FinishGaiaPairing(ctx, session)
+	if err != nil {
+		detail := "The pairing failed: " + err.Error()
+		switch {
+		case errors.Is(err, libgm.ErrIncorrectEmoji):
+			detail = "Wrong emoji tapped on the phone; link it again"
+		case errors.Is(err, libgm.ErrPairingCancelled):
+			detail = "The pairing was cancelled on the phone"
+		case errors.Is(err, libgm.ErrPairingTimeout):
+			detail = "The pairing timed out; link it again"
+		}
+		c.pairFailed(cancel, cli, detail)
+		return
+	}
+	c.handle(&events.PairSuccessful{PhoneID: phoneID})
+	if err := cli.Reconnect(context.Background()); err != nil {
+		c.log.Warn().Err(err).Msg("reconnect after pairing failed")
+	}
+}
+
+func (c *Connector) pairQR(ctx context.Context, cancel context.CancelFunc, cli *libgm.Client) error {
+	if err := cli.FetchConfig(ctx); err != nil {
+		c.pairFailed(cancel, cli, "")
 		return fail("failed", "cannot reach Google Messages: %v", err)
 	}
 	qr, err := cli.StartLogin(ctx)
 	if err != nil {
-		cancel()
-		c.mu.Lock()
-		c.pairing = nil
-		c.mu.Unlock()
+		c.pairFailed(cancel, cli, "")
 		return fail("failed", "cannot start the pairing: %v", err)
 	}
 	c.setQR(qr)
@@ -793,14 +861,7 @@ func (c *Connector) pair() error {
 		select {
 		case <-ctx.Done():
 		default:
-			cancel()
-			c.mu.Lock()
-			c.pairing = nil
-			c.client = nil
-			c.mu.Unlock()
-			cli.SetEventHandler(nil)
-			cli.Disconnect()
-			c.out.State("needs_pairing", "The pairing timed out; link it again", nil)
+			c.pairFailed(cancel, cli, "The pairing timed out; link it again")
 		}
 	}()
 	return nil
@@ -815,8 +876,5 @@ func (c *Connector) logout(ctx context.Context) error {
 }
 
 func (c *Connector) setQR(qr string) {
-	c.mu.Lock()
-	c.lastQR = qr
-	c.mu.Unlock()
 	c.out.Event("pairing", map[string]any{"kind": "qr", "data": qr, "expires_s": int(qrLifetime.Seconds())})
 }

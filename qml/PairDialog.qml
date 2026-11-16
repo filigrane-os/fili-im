@@ -60,6 +60,8 @@ Rectangle {
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: dialog.kind === "wait" ? Conversations.tr("Contacting %1…").replace("%1", dialog.platformLabel)
+                    : dialog.kind === "browser" ? Conversations.tr("Sign in to your Google account in the window that just opened. It closes by itself once you are signed in.")
+                    : dialog.kind === "emoji" ? Conversations.tr("On your phone, Google Messages asks to confirm this emoji. Tap it there.")
                     : dialog.platform === "gmessages" ? Conversations.tr("On your phone, open Messages, tap your profile picture, then Device pairing > QR code scanner, and scan this code.")
                     : dialog.kind === "qr" ? Conversations.tr("On your phone, open WhatsApp, then Settings > Linked devices > Link a device, and scan this code.")
                                            : Conversations.tr("On your phone, open WhatsApp, then Settings > Linked devices > Link with phone number, and type this code.")
@@ -95,6 +97,13 @@ Rectangle {
                 }
             }
             Text {
+                visible: dialog.kind === "emoji"
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: dialog.code
+                font.pixelSize: 96
+            }
+            Text {
                 visible: dialog.kind === "code"
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
@@ -105,6 +114,12 @@ Rectangle {
             }
             Row {
                 anchors.right: parent.right
+                spacing: FiliTheme.space3
+                TextButton {
+                    visible: dialog.platform === "gmessages" && dialog.kind !== "qr" && dialog.kind !== "emoji"
+                    label: Conversations.tr("Use a QR Code Instead")
+                    onClicked: win.startPairing(dialog.account, "qr")
+                }
                 TextButton { label: Conversations.tr("Close"); primary: true; onClicked: dialog.hide() }
             }
         }
