@@ -237,9 +237,16 @@ fn daemon_end_to_end() {
 
     // Presence, shared files and profile pictures.
     assert_eq!(c.call("presence.get", json!({}))["state"], "away");
+    assert_eq!(c.call("presence.get", json!({}))["accounts"]["fake-1"], "away");
+    // One account can have its own state, then everyone follows again
+    let own = c.call("presence.set", json!({"account": "fake-1", "state": "busy"}));
+    assert_eq!(own["state"], "away");
+    assert_eq!(own["accounts"]["fake-1"], "busy");
+    assert_eq!(c.try_call("presence.set", json!({"account": "nope", "state": "busy"}))["error"]["code"], "not_found");
     assert_eq!(c.try_call("presence.set", json!({"state": "dnd"}))["error"]["code"], "invalid");
     c.call("presence.set", json!({"state": "busy"}));
     assert_eq!(c.call("presence.get", json!({}))["state"], "busy");
+    assert_eq!(c.call("presence.get", json!({}))["accounts"]["fake-1"], "busy", "everyone follows the global state again");
     assert_eq!(c.try_call("avatar.fetch", json!({"chat": paul}))["error"]["code"], "not_found");
     assert_eq!(c.call("chat.media", json!({"chat": paul})), json!([]));
     c.call("presence.set", json!({"state": "offline"}));

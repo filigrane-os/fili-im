@@ -98,6 +98,17 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "voiceFinished"]
         fn voice_finished(self: Pin<&mut Conversations>, path: &QString, ok: bool);
+        // Open Graph data of a link (title, description, image, site) for a message: the answer comes as `linkPreview`
+        #[qinvokable]
+        #[cxx_name = "previewLink"]
+        fn preview_link(self: Pin<&mut Conversations>, url: &QString) -> i32;
+        #[qsignal]
+        #[cxx_name = "linkPreview"]
+        fn link_preview(self: Pin<&mut Conversations>, id: i32, json: &QString);
+        // [links] previews: "all" (default), "youtube" or "off"
+        #[qinvokable]
+        #[cxx_name = "linkMode"]
+        fn link_mode(self: &Conversations) -> QString;
         // Play a video link (YouTube and the sites yt-dlp knows) in mpv; false when mpv is missing
         #[qinvokable]
         #[cxx_name = "playLink"]
@@ -321,6 +332,45 @@ impl qobject::Conversations {
         if ours {
             let _ = std::fs::remove_file(path);
         }
+    }
+
+    pub fn preview_link(self: Pin<&mut Self>, url: &QString) -> i32 {
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static NEXT: AtomicI32 = AtomicI32::new(1);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let url = url.to_string();
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            // The same link in many messages is asked for once (the failures too)
+            static CACHE: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
+            let cached = CACHE.lock().unwrap().get_or_insert_with(Default::default).get(&url).cloned();
+            let json = cached.unwrap_or_else(|| {
+                let json = crate::preview::fetch(&url).map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+                CACHE.lock().unwrap().get_or_insert_with(Default::default).insert(url.clone(), json.clone());
+                json
+            });
+            let _ = qt.queue(move |c| c.link_preview(id, &QString::from(json.as_str())));
+        });
+        id
+    }
+
+    pub fn link_mode(&self) -> QString {
+        let text = std::fs::read_to_string(crate::window_parts::config_dir().join("fili-im.toml")).unwrap_or_default();
+        let mut in_links = false;
+        for line in text.lines().map(str::trim) {
+            if line.starts_with('[') {
+                in_links = line.starts_with("[links]");
+            } else if in_links && line.starts_with("previews") {
+                if line.contains("\"off\"") {
+                    return QString::from("off");
+                }
+                if line.contains("\"youtube\"") {
+                    return QString::from("youtube");
+                }
+                return QString::from("all");
+            }
+        }
+        QString::from("all")
     }
 
     pub fn play_link(&self, url: &QString) -> bool {

@@ -534,6 +534,11 @@ impl Store {
     // Outbox
 
     /// Mute a conversation here until `until` (a timestamp; the platform is not told).
+    pub fn set_pinned(&self, chat: i64, pinned: bool) -> Result<()> {
+        self.conn.execute("UPDATE chats SET pinned = ?2 WHERE id = ?1", params![chat, pinned])?;
+        Ok(())
+    }
+
     pub fn mute(&self, chat: i64, until: i64) -> Result<()> {
         self.conn.execute("UPDATE chats SET muted_until = ?2 WHERE id = ?1", params![chat, until])?;
         Ok(())

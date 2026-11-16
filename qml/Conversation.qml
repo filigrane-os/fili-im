@@ -154,20 +154,24 @@ Rectangle {
     Rectangle {
         id: head
         visible: win.current !== 0 && view.person !== null
+        // Who it is, then (a person on several platforms, no account chosen) one tab per platform
+        readonly property bool tabs: win.grouped && !win.accountFocus
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: visible ? (win.grouped ? 68 : 48) : 0
+        height: visible ? (tabs ? 48 + 32 : 48) : 0
         color: FiliTheme.background
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
         Avatar {
             id: headAvatar
-            anchors { left: parent.left; leftMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            anchors { left: parent.left; leftMargin: FiliTheme.margin; top: parent.top; topMargin: 7 }
             size: 34
             chatId: view.person ? view.person.id : 0
             title: view.person ? view.person.title : ""
             alts: win.groupIds(win.current).filter(x => x !== win.current)
         }
         Column {
-            anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; top: parent.top; topMargin: 7 }
+            height: 34
+            Item { width: 1; height: head.tabs || !win.multi ? 4 : 0 }
             Text {
                 width: parent.width
                 text: view.person ? view.person.title : ""
@@ -179,55 +183,57 @@ Rectangle {
                 color: FiliTheme.text
             }
             Text {
-                visible: win.multi && !win.grouped
+                visible: win.multi && !head.tabs
                 width: parent.width
-                text: view.person ? win.platformName(win.platformOf(view.person)) : ""
+                text: view.chat ? win.platformName(win.platformOf(view.chat)) : ""
                 elide: Text.ElideRight
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeSmall
                 color: FiliTheme.muted
             }
-            // One person on several platforms: All conversations (mixed), then one chip per platform
-            Row {
-                visible: win.grouped
-                spacing: FiliTheme.space2
-                Repeater {
-                    model: win.grouped ? [0].concat(win.group.map(c => c.id)) : []
-                    Rectangle {
-                        required property int modelData
-                        readonly property var chatOf: modelData === 0 ? null : win.chatById(modelData)
-                        readonly property bool on: win.scope === modelData
-                        height: 24
-                        width: chipRow.width + 2 * FiliTheme.space3
-                        radius: FiliTheme.radiusControl
-                        color: on ? FiliTheme.surfaceActive : chipArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
-                        border.width: FiliTheme.borderWidth
-                        border.color: on ? FiliTheme.accentColor : FiliTheme.border
-                        Row {
-                            id: chipRow
-                            anchors.centerIn: parent
-                            spacing: FiliTheme.space1 + 2
-                            Rectangle {
-                                visible: parent.parent.chatOf !== null
-                                width: 14; height: 14; radius: 7
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: parent.parent.chatOf ? win.platformColor(win.platformOf(parent.parent.chatOf)) : "transparent"
-                                Text { anchors.centerIn: parent; text: parent.parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.parent.chatOf)).charAt(0) : ""; font.pixelSize: 9; font.bold: true; color: "white" }
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.chatOf)) : Conversations.tr("All conversations")
-                                font.family: FiliTheme.font
-                                font.pixelSize: FiliTheme.sizeList
-                                color: FiliTheme.text
-                            }
+        }
+        MouseArea { z: -1; anchors { left: parent.left; right: parent.right; top: parent.top } height: 48; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
+        // The platforms, as tabs on the bottom edge: All conversations first
+        Row {
+            id: platformTabs
+            visible: head.tabs
+            anchors { left: parent.left; leftMargin: FiliTheme.margin - FiliTheme.space2; bottom: parent.bottom }
+            height: 32
+            Repeater {
+                model: head.tabs ? [0].concat(win.group.map(c => c.id)) : []
+                Rectangle {
+                    required property int modelData
+                    readonly property var chatOf: modelData === 0 ? null : win.chatById(modelData)
+                    readonly property bool on: win.scope === modelData
+                    height: parent.height
+                    width: tabRow.width + 2 * FiliTheme.space4
+                    color: on ? FiliTheme.surface : tabArea.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.6) : "transparent"
+                    // The selected tab sits on the bottom line with an accent bar
+                    Rectangle { visible: parent.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: FiliTheme.accentColor }
+                    Row {
+                        id: tabRow
+                        anchors.centerIn: parent
+                        spacing: FiliTheme.space2
+                        Rectangle {
+                            visible: parent.parent.chatOf !== null
+                            width: 14; height: 14; radius: 7
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: parent.parent.chatOf ? win.platformColor(win.platformOf(parent.parent.chatOf)) : "transparent"
+                            Text { anchors.centerIn: parent; text: parent.parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.parent.chatOf)).charAt(0) : ""; font.pixelSize: 9; font.bold: true; color: "white" }
                         }
-                        MouseArea { id: chipArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.setScope(modelData) }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: parent.parent.chatOf ? win.platformName(win.platformOf(parent.parent.chatOf)) : Conversations.tr("All conversations")
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.sizeList
+                            font.weight: parent.parent.on ? FiliTheme.weightAccent : Font.Normal
+                            color: parent.parent.on ? FiliTheme.text : FiliTheme.textSecondary
+                        }
                     }
+                    MouseArea { id: tabArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.setScope(modelData) }
                 }
             }
         }
-        MouseArea { z: -1; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
     }
 
     Rectangle {
@@ -238,7 +244,7 @@ Rectangle {
         color: FiliTheme.backgroundDeep
         z: 6
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
-        Field {
+        SearchField {
             id: findField
             anchors { left: parent.left; leftMargin: FiliTheme.margin; right: count.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             placeholderText: win.grouped && win.scope === 0 ? Conversations.tr("Find in all the conversations of this contact") : Conversations.tr("Find in this conversation")

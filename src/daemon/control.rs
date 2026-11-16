@@ -222,14 +222,21 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
             let before = params.get("before").and_then(Value::as_i64);
             Ok(Value::Array(store().messages(chat, before, limit(params, 50)).map_err(internal)?))
         }
-        "presence.get" => Ok(json!({"state": daemon.presence()})),
+        "presence.get" => Ok(daemon.presence_view()),
         "presence.set" => {
             let state = str_param(params, "state")?;
             if !["available", "away", "busy", "offline"].contains(&state) {
                 return Err(ErrorBody::new("invalid", "state is available, away, busy or offline"));
             }
-            daemon.set_presence(state).await;
-            Ok(json!({"state": state}))
+            // `account`: only that account (its own state); without it, everyone
+            let account = params.get("account").and_then(Value::as_str);
+            if let Some(key) = account
+                && store().account(key).map_err(internal)?.is_none()
+            {
+                return Err(ErrorBody::new("not_found", "no such account"));
+            }
+            daemon.set_presence(account, state).await;
+            Ok(daemon.presence_view())
         }
         "chat.media" => {
             let chat = int_param(params, "chat")?;
@@ -242,6 +249,24 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
             store().mute(chat, until).map_err(internal)?;
             daemon.chat_changed(chat);
             daemon.refresh_alerts();
+            Ok(json!({}))
+        }
+        "chat.pin" => {
+            let chat = int_param(params, "chat")?;
+            store().set_pinned(chat, bool_param(params, "pinned")).map_err(internal)?;
+            daemon.chat_changed(chat);
+            Ok(json!({}))
+        }
+        "account.reconnect" => {
+            // Stop the connector and start it again (a stuck connection, a changed network)
+            let key = str_param(params, "account")?.to_string();
+            let platform = store().account_keys().map_err(internal)?.into_iter().find(|(k, _)| *k == key).map(|(_, p)| p);
+            let Some(platform) = platform else { return Err(ErrorBody::new("not_found", "no such account")) };
+            if daemon.presence_of(&key) == "offline" {
+                return Err(ErrorBody::new("invalid", "the account is offline by choice"));
+            }
+            daemon.stop(&key).await;
+            daemon.start(&key, &platform);
             Ok(json!({}))
         }
         "avatar.fetch" => avatar(daemon, params).await,

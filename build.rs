@@ -35,6 +35,7 @@ fn main() {
                 "qml/EmojiPicker.qml",
                 "qml/QuickLook.qml",
                 "qml/Avatar.qml",
+                "qml/SearchField.qml",
                 "qml/ContactCard.qml",
                 "qml/Icon.qml",
                 "qml/Field.qml",

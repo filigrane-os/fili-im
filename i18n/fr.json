@@ -334,5 +334,18 @@
  "Find in all the conversations of this contact": "Chercher dans toutes les conversations de ce contact",
  "Older match": "Résultat plus ancien",
  "Newer match": "Résultat plus récent",
- "Find in the conversation (all the platforms of a person in the first view)": "Chercher dans la conversation (toutes les plateformes d’un contact dans la première vue)"
+ "Find in the conversation (all the platforms of a person in the first view)": "Chercher dans la conversation (toutes les plateformes d’un contact dans la première vue)",
+ "Status": "Statut",
+ "New conversation": "Nouvelle conversation",
+ "Mute for 1 hour": "Sourdine 1 heure",
+ "Mute for 8 hours": "Sourdine 8 heures",
+ "Mute for 1 week": "Sourdine 1 semaine",
+ "Mute Always": "Sourdine permanente",
+ "Unpin": "Ne plus épingler",
+ "Pin to the Top": "Épingler en haut",
+ "Contact Info…": "Infos du contact…",
+ "Find in Conversation…": "Chercher dans la conversation…",
+ "Show Only This Account": "Afficher uniquement ce compte",
+ "Mark All as Read": "Tout marquer comme lu",
+ "Reconnect": "Reconnecter"
 }

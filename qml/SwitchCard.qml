@@ -33,7 +33,7 @@ Rectangle {
         border.width: FiliTheme.borderWidth
         border.color: FiliTheme.border
         MouseArea { anchors.fill: parent }
-        Field {
+        SearchField {
             id: field
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space3 }
             placeholderText: card.forwarding ? Conversations.tr("Forward to…") : Conversations.tr("Go to a conversation")

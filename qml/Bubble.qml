@@ -37,6 +37,16 @@ Rectangle {
     readonly property bool previewsOn: Conversations.linkPreviews()
     readonly property bool card: ytId !== "" && previewsOn && !message.deleted
     property string ytTitle: ""
+    // Any other link: what the page says about itself (Open Graph), when [links] previews allows it
+    readonly property string linkMode: Conversations.linkMode()
+    property var og: ({})
+    property int ogId: 0
+    readonly property bool ogWanted: linkUrl !== "" && ytId === "" && !videoLink && linkMode === "all" && !message.deleted && !hasMedia
+    readonly property bool ogShown: ogWanted && (og.title !== undefined || og.image !== undefined)
+    Connections {
+        target: Conversations
+        function onLinkPreview(id, json) { if (id === b.ogId) { try { b.og = JSON.parse(json); } catch (e) { } } }
+    }
     // What the file is, under it: type, format, size
     function formatOf(m) {
         const mime = (m.mime || "").split(";")[0];
@@ -85,6 +95,7 @@ Rectangle {
         return (n / 1048576).toFixed(1) + " MB";
     }
     Component.onCompleted: {
+        if (ogWanted) ogId = Conversations.previewLink(linkUrl);
         if (isPicture && (message.media.size || 0) < 15000000) fetchMedia(false);
         // A video shows a still picture made from its stream: nothing is downloaded for it
         if (isVideo) win.rpc("media.thumb", { message: message.id }, r => { thumbPath = r.path; }, () => { });
@@ -100,7 +111,7 @@ Rectangle {
     }
 
     // The bubble is as wide as its widest line (text measured unwrapped), up to maxWidth; everything inside follows it
-    readonly property real innerWidth: (showsPicture || card) ? pictureWidth : b.body.indexOf("\n") >= 0 ? b.inner : Math.min(b.inner, Math.max(probe.width, probeSender.width, b.hasMedia && !b.showsPicture ? 200 : 0, foot.implicitWidth, 60) + 2)
+    readonly property real innerWidth: (showsPicture || card || ogShown) ? pictureWidth : b.body.indexOf("\n") >= 0 ? b.inner : Math.min(b.inner, Math.max(probe.width, probeSender.width, b.hasMedia && !b.showsPicture ? 200 : 0, foot.implicitWidth, 60) + 2)
     width: innerWidth + 2 * FiliTheme.space3
     // The bubble is as wide as its widest single-line text (measured, capped at the maximum); text with line breaks
     // takes the maximum
@@ -303,6 +314,75 @@ Rectangle {
             font.pixelSize: FiliTheme.sizeSmall
             color: FiliTheme.muted
         }
+        // Page card: image, site, title, description; a click opens the page
+        Rectangle {
+            visible: b.ogShown
+            width: parent.width
+            height: visible ? ogColumn.height : 0
+            radius: FiliTheme.radiusControl
+            color: FiliTheme.alpha(FiliTheme.background, 0.4)
+            clip: true
+            Column {
+                id: ogColumn
+                width: parent.width
+                Image {
+                    visible: b.og.image !== undefined && status !== Image.Error
+                    width: parent.width
+                    height: visible && status === Image.Ready ? Math.round(width * 0.52) : 0
+                    source: b.ogShown && b.og.image ? b.og.image : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    sourceSize.width: 640
+                }
+                Item {
+                    width: parent.width
+                    height: ogTexts.height + 2 * FiliTheme.space2
+                    Column {
+                        id: ogTexts
+                        x: FiliTheme.space2
+                        y: FiliTheme.space2
+                        width: parent.width - 2 * FiliTheme.space2
+                        spacing: 2
+                        Text {
+                            visible: b.og.site !== undefined
+                            width: parent.width
+                            text: b.og.site || ""
+                            elide: Text.ElideRight
+                            textFormat: Text.PlainText
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.sizeSmall
+                            color: FiliTheme.muted
+                        }
+                        Text {
+                            visible: b.og.title !== undefined
+                            width: parent.width
+                            text: b.og.title || ""
+                            maximumLineCount: 2
+                            wrapMode: Text.Wrap
+                            elide: Text.ElideRight
+                            textFormat: Text.PlainText
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.size
+                            font.weight: FiliTheme.weightAccent
+                            color: FiliTheme.text
+                        }
+                        Text {
+                            visible: b.og.description !== undefined
+                            width: parent.width
+                            text: b.og.description || ""
+                            maximumLineCount: 3
+                            wrapMode: Text.Wrap
+                            elide: Text.ElideRight
+                            textFormat: Text.PlainText
+                            font.family: FiliTheme.font
+                            font.pixelSize: FiliTheme.sizeList
+                            color: FiliTheme.textSecondary
+                        }
+                    }
+                }
+            }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Conversations.openUrl(b.linkUrl) }
+        }
         Rectangle {
             visible: b.videoLink
             width: parent.width
@@ -313,7 +393,7 @@ Rectangle {
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         TextEdit {
-            visible: b.body !== "" && !(b.card && b.body.trim() === b.linkUrl)
+            visible: b.body !== "" && !((b.card || b.ogShown) && b.body.trim() === b.linkUrl)
             width: parent.width
             text: b.body
             readOnly: true

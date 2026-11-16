@@ -30,7 +30,7 @@ Rectangle {
         id: filterBar
         anchors { top: parent.top; left: parent.left; right: parent.right; rightMargin: FiliTheme.borderWidth }
         height: 40
-        Field {
+        SearchField {
             id: filterField
             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: FiliTheme.space3; rightMargin: FiliTheme.space3 }
             placeholderText: Conversations.tr("Find a conversation")
@@ -126,7 +126,17 @@ Rectangle {
                     color: modelData.muted ? FiliTheme.text : FiliTheme.background
                 }
             }
-            MouseArea { id: area; anchors.fill: parent; hoverEnabled: true; onClicked: if (row.chat) win.openChat(row.chat.id) }
+            MouseArea {
+                id: area
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: mouse => {
+                    if (!row.chat) return;
+                    if (mouse.button === Qt.RightButton) { const p = area.mapToItem(null, mouse.x, mouse.y); win.openChatMenu(row.chat, p.x, p.y); }
+                    else win.openChat(row.chat.id);
+                }
+            }
             Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.alpha(FiliTheme.border, 0.5) }
         }
     }

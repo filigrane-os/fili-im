@@ -74,6 +74,7 @@ ApplicationWindow {
     function canon(id) { return groupIds(id)[0]; }
     readonly property var group: groupIds(current).map(chatById).filter(c => c)
     readonly property bool grouped: group.length > 1
+    readonly property bool accountFocus: filter.startsWith("account:")   // an account is chosen: its own conversation, no mixed view
     property int scope: 0                 // 0 = all the conversations of the person, else one chat
     property int targetPick: 0            // platform chosen by hand for the next message (All view)
     function scopeIds() { return grouped && scope !== 0 ? [scope] : groupIds(current); }
@@ -133,8 +134,67 @@ ApplicationWindow {
     function presenceColor(s) {
         return { available: FiliTheme.accentColor, away: FiliTheme.warning, busy: FiliTheme.danger, offline: FiliTheme.muted }[s] || FiliTheme.muted;
     }
-    function openStatusMenu(x, y) {
-        statusMenu.openAt(x, y, presences.map(s => ({ id: s, label: (s === presence ? "● " : "○ ") + presenceLabel(s) })));
+    property var presenceAccounts: ({})      // account key -> its effective state
+    function presenceOf(key) { return presenceAccounts[key] || presence; }
+    // `account`: the choices for one account (the menu of the sidebar), none: for everyone
+    function openStatusMenu(x, y, account) {
+        const cur = account ? presenceOf(account) : presence;
+        statusMenu.account = account || "";
+        statusMenu.openAt(x, y, presences.map(s => ({ id: s, label: (s === cur ? "● " : "○ ") + presenceLabel(s) })));
+    }
+
+    // ---- Context menus (right click): a conversation of the list, an account or the inbox of the sidebar ------------
+    property string menuKind: ""
+    property var menuTarget: null
+    function openChatMenu(row, x, y) {
+        const members = groupIds(row.id).map(chatById).filter(c => c);
+        const unread = members.reduce((n, c) => n + (c.unread > 0 ? c.unread : 0), 0);
+        const entries = [{ id: "open", label: Conversations.tr("Open") }];
+        if (members.length > 1) members.forEach(c => entries.push({ id: "open:" + c.id, label: Conversations.tr("Open") + " " + platformName(platformOf(c)) }));
+        if (unread > 0) entries.push({ id: "read", label: Conversations.tr("Mark as Read") });
+        if (members.every(c => c.muted)) entries.push({ id: "unmute", label: Conversations.tr("Unmute") });
+        else [["3600000", "Mute for 1 hour"], ["28800000", "Mute for 8 hours"], ["604800000", "Mute for 1 week"], ["-1", "Mute Always"]].forEach(m => entries.push({ id: "mute:" + m[0], label: Conversations.tr(m[1]) }));
+        entries.push({ id: members.some(c => c.pinned) ? "unpin" : "pin", label: members.some(c => c.pinned) ? Conversations.tr("Unpin") : Conversations.tr("Pin to the Top") });
+        entries.push({ id: "info", label: Conversations.tr("Contact Info…") });
+        entries.push({ id: "find", label: Conversations.tr("Find in Conversation…") });
+        menuKind = "chat"; menuTarget = { id: row.id, members: members };
+        ctxMenu.openAt(x, y, entries);
+    }
+    function openAccountMenu(a, x, y) {
+        const cur = presenceOf(a.key);
+        const entries = presences.map(s => ({ id: "st:" + s, label: (s === cur ? "● " : "○ ") + presenceLabel(s) }));
+        entries.push({ id: "only", label: Conversations.tr("Show Only This Account") });
+        if (chats.some(c => c.account === a.key && c.unread > 0)) entries.push({ id: "read", label: Conversations.tr("Mark All as Read") });
+        if (a.state === "needs_pairing" || a.state === "logged_out") entries.push({ id: "pair", label: Conversations.tr("Link Account…") });
+        else if (cur !== "offline") entries.push({ id: "reconnect", label: Conversations.tr("Reconnect") });
+        menuKind = "account"; menuTarget = a;
+        ctxMenu.openAt(x, y, entries);
+    }
+    function openInboxMenu(x, y) {
+        menuKind = "inbox"; menuTarget = null;
+        ctxMenu.openAt(x, y, [{ id: "read", label: Conversations.tr("Mark All as Read") }]);
+    }
+    function markAllRead(list) { list.filter(c => c.unread > 0).forEach(c => rpc("mark_read", { chat: c.id, receipt: true })); }
+    function runContext(id) {
+        const t = menuTarget;
+        if (menuKind === "chat") {
+            if (id === "open") openChat(t.id);
+            else if (id.startsWith("open:")) { openChat(t.id); setScope(parseInt(id.slice(5))); }
+            else if (id === "read") markAllRead(t.members);
+            else if (id === "unmute") t.members.forEach(c => rpc("chat.mute", { chat: c.id, until: 0 }));
+            else if (id.startsWith("mute:")) { const ms = parseInt(id.slice(5)); t.members.forEach(c => rpc("chat.mute", { chat: c.id, until: ms < 0 ? -1 : Date.now() + ms })); }
+            else if (id === "pin" || id === "unpin") t.members.forEach(c => rpc("chat.pin", { chat: c.id, pinned: id === "pin" }));
+            else if (id === "info") { openChat(t.id); showContact(chatById(t.id)); }
+            else if (id === "find") { openChat(t.id); Qt.callLater(() => conversation.openFind()); }
+        } else if (menuKind === "account") {
+            if (id.startsWith("st:")) rpc("presence.set", { account: t.key, state: id.slice(3) });
+            else if (id === "only") filter = "account:" + t.key;
+            else if (id === "read") markAllRead(chats.filter(c => c.account === t.key));
+            else if (id === "pair") rpc("account.pair", { account: t.key });
+            else if (id === "reconnect") rpc("account.reconnect", { account: t.key });
+        } else if (menuKind === "inbox") {
+            if (id === "read") markAllRead(chats);
+        }
     }
     // Profile pictures: asked once per conversation, a few at a time by the daemon
     property var avatars: ({})
@@ -188,7 +248,7 @@ ApplicationWindow {
     function reload() {
         rpc("accounts.list", {}, list => { accounts = list; });
         rpc("chats.list", { limit: 500 }, list => { chats = list; });
-        rpc("presence.get", {}, r => { presence = r.state; });
+        rpc("presence.get", {}, r => { presence = r.state; presenceAccounts = r.accounts || {}; });
         if (current) conversation.load();
     }
     function upsert(list, item, key) {
@@ -206,6 +266,7 @@ ApplicationWindow {
             if (scopeIds().includes(e.message.chat)) conversation.apply(e.message);
         } else if (e.event === "presence") {
             presence = e.state;
+            presenceAccounts = e.accounts || {};
         } else if (e.event === "account") {
             accounts = upsert(accounts, e.account, "key");
         } else if (e.event === "account.removed") {
@@ -227,6 +288,10 @@ ApplicationWindow {
         if (!tabs.includes(id)) tabs = tabs.concat([id]);
         current = id;
         scope = 0;
+        if (accountFocus && groupIds(id).length > 1) {
+            const mine = groupIds(id).map(chatById).find(c => c && c.account === filter.slice(8));
+            if (mine) scope = mine.id;
+        }
         targetPick = 0;
         replyTo = null;
         conversation.load();
@@ -347,8 +412,14 @@ ApplicationWindow {
             id: tools
             anchors { right: search.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             spacing: FiliTheme.space1
-            IconButton { name: "refresh"; tip: Conversations.tr("Refresh"); onClicked: win.reload() }
-            IconButton { name: "mail-open"; tip: Conversations.tr("Mark as read"); enabledState: win.current !== 0; onClicked: win.rpc("mark_read", { chat: win.current, receipt: true }) }
+            // Where it matters: write to someone (Ctrl+K), and the user's status (a click opens the choices)
+            IconButton { name: "compose"; tip: Conversations.tr("New conversation") + "  Ctrl+K"; onClicked: switchCard.show() }
+            IconButton {
+                id: statusButton
+                tip: Conversations.tr("Status") + ": " + win.presenceLabel(win.presence)
+                onClicked: { const p = statusButton.mapToItem(null, 0, statusButton.height + 2); win.openStatusMenu(p.x - 120, p.y); }
+                Rectangle { anchors.centerIn: parent; width: 12; height: 12; radius: 6; color: win.presenceColor(win.presence) }
+            }
         }
         Rectangle {
             id: closeButton
@@ -393,9 +464,20 @@ ApplicationWindow {
                 font.pixelSize: FiliTheme.size
                 color: FiliTheme.muted
             }
+            Rectangle {
+                id: searchClear
+                visible: searchInput.text !== ""
+                anchors { right: parent.right; rightMargin: 3; verticalCenter: parent.verticalCenter }
+                width: 18
+                height: 18
+                radius: 9
+                color: searchClearArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
+                Icon { anchors.centerIn: parent; name: "x"; size: 12; color: FiliTheme.textSecondary }
+                MouseArea { id: searchClearArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { searchInput.text = ""; win.query = ""; win.results = []; searchInput.forceActiveFocus(); } }
+            }
             TextInput {
                 id: searchInput
-                anchors { fill: parent; leftMargin: FiliTheme.space2; rightMargin: FiliTheme.space2 }
+                anchors { fill: parent; leftMargin: FiliTheme.space2; rightMargin: searchClear.visible ? 24 : FiliTheme.space2 }
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
                 font.family: FiliTheme.font
@@ -473,6 +555,12 @@ ApplicationWindow {
     SwitchCard { id: switchCard; anchors.fill: parent; onForwardTo: (m, chat) => win.sendForward(m, chat) }
     ContactCard { id: contactCard; anchors.fill: parent }
     QuickLook { id: quickLookCard; anchors.fill: parent }
-    PopupMenu { id: statusMenu; anchors.fill: parent; onActivated: id => win.rpc("presence.set", { state: id }) }
+    PopupMenu {
+        id: statusMenu
+        property string account: ""
+        anchors.fill: parent
+        onActivated: id => win.rpc("presence.set", account !== "" ? { account: account, state: id } : { state: id })
+    }
+    PopupMenu { id: ctxMenu; anchors.fill: parent; onActivated: id => win.runContext(id) }
     EmojiPicker { id: emojiPicker; anchors.fill: parent; onPicked: e => { if (win.emojiTarget) win.rpc("react", { message: win.emojiTarget.id, emoji: e }); } }
 }

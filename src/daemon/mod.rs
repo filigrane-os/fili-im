@@ -31,8 +31,8 @@ pub struct Daemon {
     alerts: notify::Alerts,
     quit: tokio::sync::Notify,
     debug: bool,
-    /// available | away | busy | offline (kept in the state directory)
-    presence: Mutex<String>,
+    /// available | away | busy | offline, for everyone (key "") and per account (kept in the state directory)
+    presence: Mutex<HashMap<String, String>>,
     /// Profile pictures are asked two at a time at most.
     avatars: tokio::sync::Semaphore,
 }
@@ -49,12 +49,26 @@ fn single_instance() -> Option<std::fs::File> {
     locked.then_some(file)
 }
 
-fn load_presence() -> String {
+const PRESENCES: [&str; 4] = ["available", "away", "busy", "offline"];
+
+/// `presence` in the state directory: a line `state` for everyone, and `account=state` lines for the accounts that
+/// have their own.
+fn load_presence() -> HashMap<String, String> {
     let saved = std::fs::read_to_string(paths::state_dir().join("presence")).unwrap_or_default();
-    match saved.trim() {
-        s @ ("available" | "away" | "busy" | "offline") => s.to_string(),
-        _ => "away".to_string(),
+    let mut map = HashMap::new();
+    for line in saved.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let (key, state) = line.split_once('=').unwrap_or(("", line));
+        if PRESENCES.contains(&state) {
+            map.insert(key.to_string(), state.to_string());
+        }
     }
+    map
+}
+
+fn save_presence(map: &HashMap<String, String>) {
+    let mut lines: Vec<String> = map.iter().map(|(k, v)| if k.is_empty() { v.clone() } else { format!("{k}={v}") }).collect();
+    lines.sort();
+    let _ = std::fs::write(paths::state_dir().join("presence"), lines.join("\n") + "\n");
 }
 
 pub fn run() -> i32 {
@@ -102,10 +116,10 @@ impl Daemon {
             }
         };
         let accounts = self.store.lock().unwrap().account_keys().unwrap_or_default();
-        if self.presence() == "offline" {
-            self.mark_offline(&accounts.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>());
-        } else {
-            for (key, platform) in accounts {
+        for (key, platform) in accounts {
+            if self.presence_of(&key) == "offline" {
+                self.mark_offline(&[key]);
+            } else {
                 self.start(&key, &platform);
             }
         }
@@ -129,8 +143,19 @@ impl Daemon {
         0
     }
 
-    pub fn presence(&self) -> String {
-        self.presence.lock().unwrap().clone()
+    /// The state of an account: its own, else the one for everyone, else away.
+    pub fn presence_of(&self, account: &str) -> String {
+        let map = self.presence.lock().unwrap();
+        map.get(account).or_else(|| map.get("")).cloned().unwrap_or_else(|| "away".to_string())
+    }
+
+    /// Everyone's state and the effective state of every account, for `presence.get` and the `presence` event.
+    pub fn presence_view(&self) -> Value {
+        let keys = self.store.lock().unwrap().account_keys().unwrap_or_default();
+        let accounts: serde_json::Map<String, Value> =
+            keys.iter().map(|(k, _)| (k.clone(), json!(self.presence_of(k)))).collect();
+        let default = self.presence.lock().unwrap().get("").cloned().unwrap_or_else(|| "away".to_string());
+        json!({"state": default, "accounts": accounts})
     }
 
     fn mark_offline(&self, keys: &[String]) {
@@ -142,30 +167,42 @@ impl Daemon {
         }
     }
 
-    /// Show the user as available (online to their contacts) or not, and stop or restart the connectors for offline.
-    async fn set_presence(self: &Arc<Self>, state: &str) {
-        let old = std::mem::replace(&mut *self.presence.lock().unwrap(), state.to_string());
-        let _ = std::fs::write(paths::state_dir().join("presence"), state);
+    /// Show the user as available (online to their contacts) or not, and stop or restart connectors for offline.
+    /// `account`: only that account (its own state); none: everyone, every account following again.
+    async fn set_presence(self: &Arc<Self>, account: Option<&str>, state: &str) {
         let accounts = self.store.lock().unwrap().account_keys().unwrap_or_default();
-        if state == "offline" {
-            let keys: Vec<String> = accounts.into_iter().map(|(k, _)| k).collect();
-            for key in &keys {
-                self.stop(key).await;
-            }
-            self.mark_offline(&keys);
-        } else if old == "offline" {
-            for (key, platform) in accounts {
-                if self.connector(&key).is_none() {
-                    self.start(&key, &platform);
+        let before: HashMap<String, String> = accounts.iter().map(|(k, _)| (k.clone(), self.presence_of(k))).collect();
+        {
+            let mut map = self.presence.lock().unwrap();
+            match account {
+                Some(key) => {
+                    map.insert(key.to_string(), state.to_string());
+                }
+                None => {
+                    map.clear();
+                    map.insert(String::new(), state.to_string());
                 }
             }
-        } else {
-            let running: Vec<Arc<Connector>> = self.connectors.lock().unwrap().values().map(|r| r.conn.clone()).collect();
-            for conn in running {
+            save_presence(&map);
+        }
+        for (key, platform) in &accounts {
+            let (old, new) = (before[key].clone(), self.presence_of(key));
+            if new == "offline" {
+                self.stop(key).await;
+                self.mark_offline(std::slice::from_ref(key));
+            } else if old == "offline" {
+                if self.connector(key).is_none() {
+                    self.start(key, platform);
+                }
+            } else if old != new
+                && let Some(conn) = self.connector(key)
+            {
                 self.send_presence(&conn).await;
             }
         }
-        self.broadcast(json!({"event": "presence", "state": state}));
+        let mut event = self.presence_view();
+        event["event"] = json!("presence");
+        self.broadcast(event);
     }
 
     async fn send_presence(&self, conn: &Arc<Connector>) {
@@ -173,7 +210,7 @@ impl Daemon {
             return;
         }
         let mut args = serde_json::Map::new();
-        args.insert("state".into(), json!(if self.presence() == "available" { "available" } else { "unavailable" }));
+        args.insert("state".into(), json!(if self.presence_of(&conn.key) == "available" { "available" } else { "unavailable" }));
         let _ = conn.command("presence", args, Duration::from_secs(10)).await;
     }
 
@@ -372,7 +409,8 @@ impl Daemon {
     /// A desktop notification for a new incoming message, unless its chat is muted.
     fn announce(self: &Arc<Self>, chat: i64, message: &crate::protocol::Message) {
         let Ok(Some(view)) = self.store.lock().unwrap().chat(chat) else { return };
-        if view["muted"].as_bool().unwrap_or(false) || self.presence() == "busy" {
+        let account = view["account"].as_str().unwrap_or("");
+        if view["muted"].as_bool().unwrap_or(false) || self.presence_of(account) == "busy" {
             return;
         }
         let title = view["title"].as_str().unwrap_or("").to_string();

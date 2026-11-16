@@ -66,6 +66,7 @@ Rectangle {
         property string count
         property bool selected
         signal clicked()
+        signal context(real x, real y)
         width: side.width - FiliTheme.borderWidth
         height: FiliTheme.sideRowHeight
         color: selected ? FiliTheme.surfaceHover : rowArea.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.5) : "transparent"
@@ -86,7 +87,16 @@ Rectangle {
             font.pixelSize: FiliTheme.sizeSmall
             color: FiliTheme.muted
         }
-        MouseArea { id: rowArea; anchors.fill: parent; hoverEnabled: true; onClicked: row.clicked() }
+        MouseArea {
+            id: rowArea
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) { const p = rowArea.mapToItem(null, mouse.x, mouse.y); row.context(p.x, p.y); }
+                else row.clicked();
+            }
+        }
     }
 
     Flickable {
@@ -103,6 +113,7 @@ Rectangle {
             Row28 {
                 visible: !side.folded.inbox
                 label: Conversations.tr("All")
+                onContext: (x, y) => win.openInboxMenu(x, y)
                 selected: win.filter === "all"
                 count: win.unreadTotal > 0 ? String(win.unreadTotal) : ""
                 onClicked: win.filter = "all"
@@ -110,6 +121,7 @@ Rectangle {
             Row28 {
                 visible: !side.folded.inbox
                 label: Conversations.tr("Unread")
+                onContext: (x, y) => win.openInboxMenu(x, y)
                 selected: win.filter === "unread"
                 onClicked: win.filter = "unread"
             }
@@ -119,7 +131,8 @@ Rectangle {
                 Row28 {
                     required property var modelData
                     label: side.accountLabel(modelData)
-                    detail: side.stateWord(modelData)
+                    detail: modelData.state === "connected" ? win.presenceLabel(win.presenceOf(modelData.key)) : side.stateWord(modelData)
+                    onContext: (x, y) => win.openAccountMenu(modelData, x, y)
                     selected: win.filter === "account:" + modelData.key
                     onClicked: win.filter = "account:" + modelData.key
                 }
@@ -155,7 +168,7 @@ Rectangle {
             id: statusArea
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: { const p = statusRow.mapToItem(win, FiliTheme.space3, 0); win.openStatusMenu(p.x, p.y - 4 * 26 - 12); }
+            onClicked: { const p = statusRow.mapToItem(null, FiliTheme.space3, 0); win.openStatusMenu(p.x, p.y - 4 * 26 - 12); }
         }
     }
     Rectangle {
