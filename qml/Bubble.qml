@@ -215,7 +215,7 @@ Rectangle {
                 color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
                 Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
             }
-            Spinner { anchors.centerIn: parent; size: 28; visible: b.fetching && picture.shown.status !== Image.Ready }
+            Spinner { anchors.centerIn: parent; size: 72; visible: b.fetching && picture.shown.status !== Image.Ready }
             Text {
                 anchors.centerIn: parent
                 visible: picture.shown.status !== Image.Ready && !b.fetching

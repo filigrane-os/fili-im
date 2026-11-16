@@ -79,7 +79,9 @@ Item {
     // Looking the stream up, or the player waiting for data: an endless spinner
     Spinner {
         anchors.centerIn: parent
-        size: v.compact ? 32 : 44
+        size: v.compact ? 80 : 140
+        onDark: true
+        backdrop: true
         visible: v.phase === "resolving" || (v.phase === "ready" && (player.mediaStatus === MediaPlayer.LoadingMedia || player.mediaStatus === MediaPlayer.StalledMedia || player.mediaStatus === MediaPlayer.BufferingMedia))
     }
     Column {

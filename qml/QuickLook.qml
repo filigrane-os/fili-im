@@ -277,7 +277,9 @@ Rectangle {
         // Waiting / failure
         Spinner {
             anchors.centerIn: parent
-            size: 44
+            size: 140
+            onDark: true
+            backdrop: true
             visible: ql.current !== null && ql.path === "" && (ql.isPicture || ql.isVideo) && ql.playerError === "" && !ql.failed[ql.current.id]
         }
         Text {
