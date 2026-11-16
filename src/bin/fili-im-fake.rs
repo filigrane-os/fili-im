@@ -40,7 +40,7 @@ fn now() -> i64 {
 fn capabilities() -> Capabilities {
     Capabilities {
         pairing: vec!["qr".into(), "code".into()],
-        message_kinds: vec!["text".into()],
+        message_kinds: vec!["text".into(), "voice".into()],
         edit: Some(Limit { window_s: Some(900) }),
         delete: Some(Limit::default()),
         reactions: Reactions::OnePerUser,
@@ -105,7 +105,7 @@ impl Fake {
         }
         for (id, name, phone) in [("paul", "Paul", "+33611111111"), ("lea", "Léa", "+33622222222")] {
             self.out.event(Event::ContactUpsert {
-                contact: Contact { id: id.into(), name: Some(name.into()), phone: Some(phone.into()) },
+                contact: Contact { id: id.into(), name: Some(name.into()), phone: Some(phone.into()), ..Default::default() },
             });
         }
         self.out.event(Event::ChatUpsert { chat: Chat { id: "paul".into(), kind: Some("direct".into()), ..Default::default() } });
@@ -127,7 +127,7 @@ impl Fake {
     /// a contact without a phone number (a username, as on Telegram) and a short conversation.
     fn sam_scene(&self) {
         self.out.event(Event::ContactUpsert {
-            contact: Contact { id: "sam".into(), name: Some("Sam".into()), phone: None },
+            contact: Contact { id: "sam".into(), name: Some("Sam".into()), ..Default::default() },
         });
         self.out.event(Event::ChatUpsert { chat: Chat { id: "sam".into(), kind: Some("direct".into()), ..Default::default() } });
         let t = now() - 2 * 3_600_000;
@@ -208,7 +208,7 @@ impl Fake {
                 known_chat(&chat)?;
                 let client = s("client_id");
                 let text: Text = p.get("text").cloned().and_then(|t| serde_json::from_value(t).ok()).unwrap_or_default();
-                if text.plain.is_empty() {
+                if text.plain.is_empty() && p.get("media").is_none_or(Value::is_null) {
                     return Err(("invalid", "empty message".into()));
                 }
                 let mut sent = self.sent.lock().unwrap();
@@ -220,7 +220,8 @@ impl Fake {
                     sent.insert(client, id.clone());
                 }
                 drop(sent);
-                self.reply_later(chat, text.plain);
+                let echo = if text.plain.is_empty() { "[file]".to_string() } else { text.plain };
+                self.reply_later(chat, echo);
                 Ok(json!({"id": id, "timestamp": now()}))
             }
             "presence" => {

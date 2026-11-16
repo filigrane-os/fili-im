@@ -21,7 +21,7 @@ Rectangle {
         const m = message.media;
         if (!m) return "";
         const kinds = { image: "Photo", video: "Video", audio: "Voice message", voice: "Voice message", file: "Document", document: "Document", sticker: "Sticker" };
-        return (kinds[m.kind] ? Conversations.tr(kinds[m.kind]) : m.kind) + (m.name ? ": " + m.name : "");
+        return (kinds[m.kind] ? Conversations.tr(kinds[m.kind]) : m.kind) + (m.name && m.kind !== "voice" ? ": " + m.name : "");
     }
     readonly property string body: message.deleted ? Conversations.tr("Message deleted") : message.text.plain
     // Pictures show in the bubble (downloaded when it appears); videos and files download when clicked, then open
@@ -111,8 +111,9 @@ Rectangle {
     height: content.height + 2 * FiliTheme.space2
     radius: FiliTheme.radiusWindow
     color: mine ? FiliTheme.surfaceActive : FiliTheme.surface
-    border.width: failed ? FiliTheme.borderWidth : 0
-    border.color: FiliTheme.danger
+    property bool highlighted: false
+    border.width: failed || highlighted ? FiliTheme.borderWidth : 0
+    border.color: failed ? FiliTheme.danger : FiliTheme.accentColor
 
     Column {
         id: content
@@ -338,13 +339,6 @@ Rectangle {
             id: foot
             x: content.width - width
             spacing: FiliTheme.space2
-            Rectangle {
-                visible: b.platform !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                width: 14; height: 14; radius: 7
-                color: win.platformColor(b.platform)
-                Text { anchors.centerIn: parent; text: win.platformName(b.platform).charAt(0); font.pixelSize: 9; font.bold: true; color: "white" }
-            }
             Text {
                 visible: b.failed
                 text: Conversations.tr("Send again")

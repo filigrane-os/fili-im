@@ -151,7 +151,7 @@ until it has seen the messages itself. `muted_until`: 0 not muted, -1 forever, e
 {"event": "contact.upsert", "contact": {"id": "33600000002@s.whatsapp.net", "name": "Paul", "phone": "+33600000002"}}
 ```
 
-One stable id per person on the platform (WhatsApp maps phone-number ids and LIDs to one id before sending).
+One stable id per person on the platform (WhatsApp maps phone-number ids and LIDs to one id before sending). A name the person chose for themselves (a push name) is sent with `"name_weak": true`: it fills a missing name and never replaces the address-book one.
 
 ### `message.new` and `history.batch`
 

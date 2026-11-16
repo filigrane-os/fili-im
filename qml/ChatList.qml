@@ -25,9 +25,24 @@ Rectangle {
     readonly property bool searching: win.query !== ""
     readonly property var rows: searching ? win.results : win.rows
 
+    // Find a conversation by name as you type (the header's search looks in the messages)
+    Item {
+        id: filterBar
+        anchors { top: parent.top; left: parent.left; right: parent.right; rightMargin: FiliTheme.borderWidth }
+        height: 40
+        Field {
+            id: filterField
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: FiliTheme.space3; rightMargin: FiliTheme.space3 }
+            placeholderText: Conversations.tr("Find a conversation")
+            onTextChanged: win.listFilter = text
+            Keys.onEscapePressed: { text = ""; focus = false; }
+            Keys.onReturnPressed: if (list.rows.length > 0 && list.rows[0].id) win.openChat(list.rows[0].id)
+        }
+        Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.alpha(FiliTheme.border, 0.5) }
+    }
     ListView {
         id: view
-        anchors { fill: parent; rightMargin: FiliTheme.borderWidth }
+        anchors { top: filterBar.bottom; bottom: parent.bottom; left: parent.left; right: parent.right; rightMargin: FiliTheme.borderWidth }
         clip: true
         model: list.rows
         boundsBehavior: Flickable.StopAtBounds
@@ -39,6 +54,7 @@ Rectangle {
             readonly property bool hit: list.searching
             readonly property var chat: hit ? win.chatById(modelData.chat) : modelData
             // The chat the last message belongs to (a search hit: the chat of the hit)
+            readonly property bool severalPlatforms: chat ? (hit ? win.groupIds(chat.id).length > 1 : modelData.members !== undefined) : false
             readonly property string platform: {
                 const m = hit ? modelData : (modelData.last || null);
                 return m ? win.platformOf(win.chatById(hit ? modelData.chat : m.chat)) : (chat ? win.platformOf(chat) : "");
@@ -75,7 +91,7 @@ Rectangle {
             // Which platform the last message went through, just before it
             Rectangle {
                 id: via
-                visible: win.multi && row.platform !== ""
+                visible: win.multi && row.platform !== "" && row.severalPlatforms
                 anchors { left: mark.right; leftMargin: FiliTheme.space3; bottom: parent.bottom; bottomMargin: 11 }
                 width: visible ? 14 : 0
                 height: 14
@@ -114,6 +130,7 @@ Rectangle {
             Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.alpha(FiliTheme.border, 0.5) }
         }
     }
+    function focusFilter() { filterField.forceActiveFocus(); filterField.selectAll(); }
     FiliScrollBar { flick: view; anchors { top: view.top; bottom: view.bottom; right: view.right } }
     Text {
         anchors.centerIn: parent

@@ -81,6 +81,23 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "qrRows"]
         fn qr_rows(self: &Conversations, text: &QString) -> QString;
+        // A new file name for a voice message being recorded, and the removal of one once it is sent or dropped
+        #[qinvokable]
+        #[cxx_name = "voicePath"]
+        fn voice_path(self: &Conversations) -> QString;
+        #[qinvokable]
+        #[cxx_name = "discardVoice"]
+        fn discard_voice(self: &Conversations, path: &QString);
+        // Record the microphone (pw-record piped to opusenc: mono Ogg Opus at `path`); `voiceFinished` follows the stop
+        #[qinvokable]
+        #[cxx_name = "startVoice"]
+        fn start_voice(self: Pin<&mut Conversations>, path: &QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "stopVoice"]
+        fn stop_voice(self: Pin<&mut Conversations>);
+        #[qsignal]
+        #[cxx_name = "voiceFinished"]
+        fn voice_finished(self: Pin<&mut Conversations>, path: &QString, ok: bool);
         // Play a video link (YouTube and the sites yt-dlp knows) in mpv; false when mpv is missing
         #[qinvokable]
         #[cxx_name = "playLink"]
@@ -225,6 +242,9 @@ impl cxx_qt::Initialize for Conversations {
     }
 }
 
+/// The recording in progress: the capture, the encoder, the file.
+static VOICE: std::sync::Mutex<Option<(std::process::Child, std::process::Child, String)>> = std::sync::Mutex::new(None);
+
 impl qobject::Conversations {
     pub fn theme_json(&self) -> QString {
         QString::from(&super::theme::theme_json())
@@ -236,6 +256,71 @@ impl qobject::Conversations {
 
     pub fn footer(&self) -> bool {
         crate::window_parts::shown_now("footer")
+    }
+
+    pub fn start_voice(self: Pin<&mut Self>, path: &QString) -> bool {
+        use std::process::{Command, Stdio};
+        let path = path.to_string();
+        let mut slot = VOICE.lock().unwrap();
+        if slot.is_some() {
+            return false;
+        }
+        let Ok(mut capture) = Command::new("pw-record")
+            .args(["--rate", "48000", "--channels", "1", "--format", "s16", "-"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let Some(pipe) = capture.stdout.take() else { return false };
+        let encoder = Command::new("opusenc")
+            .args(["--raw", "--raw-rate", "48000", "--raw-chan", "1", "--raw-bits", "16", "--quiet", "--bitrate", "32", "-"])
+            .arg(&path)
+            .stdin(Stdio::from(pipe))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        let Ok(encoder) = encoder else {
+            let _ = capture.kill();
+            let _ = capture.wait();
+            return false;
+        };
+        *slot = Some((capture, encoder, path));
+        true
+    }
+
+    pub fn stop_voice(self: Pin<&mut Self>) {
+        let Some((mut capture, mut encoder, path)) = VOICE.lock().unwrap().take() else { return };
+        let qt = self.qt_thread();
+        // The capture ends (SIGTERM), the encoder sees the end of its input and finishes the file
+        // SAFETY: signalling a child process this function owns.
+        unsafe { libc::kill(capture.id() as i32, libc::SIGTERM) };
+        std::thread::spawn(move || {
+            let _ = capture.wait();
+            let ok = encoder.wait().map(|s| s.success()).unwrap_or(false);
+            let _ = qt.queue(move |c| c.voice_finished(&QString::from(path.as_str()), ok));
+        });
+    }
+
+    pub fn voice_path(&self) -> QString {
+        let dir = crate::paths::runtime_dir();
+        let _ = crate::paths::private_dir(&dir);
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        QString::from(dir.join(format!("voice-{stamp}.ogg")).display().to_string().as_str())
+    }
+
+    /// Only the recordings made here are removed (`voice-*.ogg` in the runtime directory).
+    pub fn discard_voice(&self, path: &QString) {
+        let path = std::path::PathBuf::from(path.to_string());
+        let ours = path.parent() == Some(crate::paths::runtime_dir().as_path())
+            && path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("voice-") && n.to_string_lossy().ends_with(".ogg"));
+        if ours {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     pub fn play_link(&self, url: &QString) -> bool {

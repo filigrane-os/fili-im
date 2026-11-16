@@ -58,6 +58,9 @@ type Contact struct {
 	ID    string `json:"id"`
 	Name  string `json:"name,omitempty"`
 	Phone string `json:"phone,omitempty"`
+	// NameWeak: the name is one people gave themselves (a push name), not one from the address book; it never
+	// replaces a name the daemon already has.
+	NameWeak bool `json:"name_weak,omitempty"`
 }
 
 type ErrorBody struct {
@@ -141,7 +144,7 @@ func (o *Out) Reply(id uint64, result any, err *ErrorBody) {
 func capabilities() map[string]any {
 	return map[string]any{
 		"pairing":         []string{"qr", "code"},
-		"message_kinds":   []string{"text", "image", "video", "file"},
+		"message_kinds":   []string{"text", "image", "video", "file", "voice"},
 		"media_max_bytes": 104857600,
 		"edit":            map[string]any{"window_s": 900},
 		"delete":          map[string]any{"window_s": 172800},

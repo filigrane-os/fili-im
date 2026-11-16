@@ -227,6 +227,9 @@ pub struct Contact {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phone: Option<String>,
+    /// The name is one people gave themselves (a push name): it only fills a missing name, never replaces one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub name_weak: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

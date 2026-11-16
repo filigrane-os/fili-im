@@ -279,7 +279,12 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
             mark_read(daemon, int_param(params, "chat")?, ask)
         }
         "react" | "edit" | "delete" => act(daemon, method, params).await,
-        "search" => Ok(Value::Array(store().search(str_param(params, "query")?, limit(params, 50)).map_err(internal)?)),
+        "search" => {
+            // `chats`: only these conversation ids
+            let chats: Option<Vec<i64>> =
+                params.get("chats").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_i64).collect());
+            Ok(Value::Array(store().search(str_param(params, "query")?, limit(params, 50), chats.as_deref()).map_err(internal)?))
+        }
         "shutdown" => {
             daemon.quit.notify_one();
             Ok(json!({}))
@@ -382,6 +387,7 @@ fn mime_of(name: &str) -> Option<&'static str> {
         "webm" => "video/webm",
         "mkv" => "video/x-matroska",
         "pdf" => "application/pdf",
+        "ogg" | "oga" | "opus" => "audio/ogg; codecs=opus",
         _ => return None,
     })
 }
@@ -396,7 +402,10 @@ fn outgoing_media(daemon: &Arc<Daemon>, chat: i64, params: &Map<String, Value>) 
     }
     let name = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
     let mime = params.get("mime").and_then(Value::as_str).map(str::to_owned).or_else(|| mime_of(&name).map(str::to_owned));
+    let voice = params.get("kind").and_then(Value::as_str) == Some("voice")
+        && mime.as_deref().is_some_and(|m| m.starts_with("audio/ogg"));
     let kind = match mime.as_deref() {
+        _ if voice => "voice",
         Some(m) if m.starts_with("image/") && m != "image/gif" => "image",
         Some(m) if m.starts_with("video/") => "video",
         _ => "file",

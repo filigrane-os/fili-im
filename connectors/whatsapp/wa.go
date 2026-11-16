@@ -395,10 +395,12 @@ func (c *Connector) pushName(jid types.JID, name string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if info, err := c.cli().Store.Contacts.GetContact(ctx, jid); err == nil && info.Found && (info.FullName != "" || info.FirstName != "") {
+	// The address book is keyed by phone number: look the person up by it, not by a LID
+	if info, err := c.cli().Store.Contacts.GetContact(ctx, c.canon(jid)); err == nil && info.Found && (info.FullName != "" || info.FirstName != "") {
 		return
 	}
-	c.contact(jid, name)
+	id := c.canon(jid)
+	c.out.Event("contact.upsert", map[string]any{"contact": Contact{ID: id.String(), Name: name, Phone: phoneOf(id), NameWeak: true}})
 }
 
 // ensureContact: the first time a user shows up, tell the daemon their phone number, and their push name when the
@@ -439,13 +441,17 @@ func (c *Connector) syncDirectory() {
 	if contacts, err := cli.Store.Contacts.GetAllContacts(ctx); err == nil {
 		for jid, info := range contacts {
 			name := info.FullName
-			for _, n := range []string{info.FirstName, info.BusinessName, info.PushName} {
+			for _, n := range []string{info.FirstName, info.BusinessName} {
 				if name == "" {
 					name = n
 				}
 			}
+			weak := false
+			if name == "" {
+				name, weak = info.PushName, true
+			}
 			id := c.canon(jid)
-			c.out.Event("contact.upsert", map[string]any{"contact": Contact{ID: id.String(), Name: name, Phone: phoneOf(id)}})
+			c.out.Event("contact.upsert", map[string]any{"contact": Contact{ID: id.String(), Name: name, Phone: phoneOf(id), NameWeak: weak}})
 		}
 	}
 	if groups, err := cli.GetJoinedGroups(ctx); err == nil {
@@ -886,6 +892,9 @@ func (c *Connector) mediaMessage(ctx context.Context, cli *whatsmeow.Client, raw
 		kind = whatsmeow.MediaImage
 	case "video":
 		kind = whatsmeow.MediaVideo
+	case "voice":
+		kind = whatsmeow.MediaAudio
+		mime = "audio/ogg; codecs=opus"
 	}
 	up, err := cli.Upload(ctx, data, kind)
 	if err != nil {
@@ -896,6 +905,13 @@ func (c *Connector) mediaMessage(ctx context.Context, cli *whatsmeow.Client, raw
 		capt = proto.String(caption)
 	}
 	switch in.Kind {
+	case "voice":
+		// A voice note: Ogg Opus with the push-to-talk flag, its length read from the last Ogg page
+		return &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, Mimetype: &mime,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &up.FileLength,
+			Seconds: proto.Uint32(oggSeconds(data)), PTT: proto.Bool(true), ContextInfo: ctxInfo,
+		}}, nil
 	case "image":
 		return &waE2E.Message{ImageMessage: &waE2E.ImageMessage{
 			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, Mimetype: &mime,

@@ -14,6 +14,7 @@ use std::{
 pub const ACTIONS: &[&str] = &[
     "new-conversation",
     "search",
+    "search-all",
     "next-conversation",
     "previous-conversation",
     "next-tab",
@@ -37,6 +38,7 @@ pub const ACTIONS: &[&str] = &[
     "select-all",
     "focus-composer",
     "contact-info",
+    "record-voice",
     "status-available",
     "status-away",
     "status-busy",

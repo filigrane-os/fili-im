@@ -16,6 +16,50 @@ Rectangle {
     readonly property var chat: win.targetChat
     readonly property var caps: win.capsOf(chat)
     readonly property bool group: person ? person.kind !== "direct" : false
+    // ---- Find in the conversation (or in all the conversations of the person) -----------------------------------------
+    property bool finding: false
+    property string findQuery: ""
+    property var hits: []          // matching messages, newest first
+    property int hitIndex: 0
+    property int highlightId: 0
+    function openFind() { finding = true; findField.forceActiveFocus(); findField.selectAll(); }
+    function closeFind() { finding = false; hits = []; highlightId = 0; composer.focusInput(); }
+    function runFind() {
+        const q = findQuery.trim();
+        if (q === "") { hits = []; hitIndex = 0; return; }
+        const ids = win.scopeIds(), asked = q;
+        win.rpc("search", { query: q, chats: ids, limit: 300 }, list => {
+            if (asked !== findQuery.trim()) return;
+            hits = list;
+            hitIndex = 0;
+            if (list.length) jumpTo(0);
+        });
+    }
+    function stepFind(step) {
+        if (!hits.length) return;
+        hitIndex = (hitIndex + step + hits.length) % hits.length;
+        jumpTo(hitIndex);
+    }
+    // Show hit i: older pages are loaded until it is there, then the view centres on it
+    function jumpTo(i) {
+        const hit = hits[i];
+        if (!hit) return;
+        const show = () => {
+            const at = messages.findIndex(m => m.id === hit.id);
+            if (at < 0) return;
+            list_.positionViewAtIndex(at, ListView.Center);
+            highlightId = hit.id;
+            flash.restart();
+        };
+        const reveal = () => {
+            if (messages.findIndex(m => m.id === hit.id) >= 0) show();
+            else if (more && !loading) loadEarlier(reveal);
+            else if (loading) Qt.callLater(reveal);
+        };
+        reveal();
+    }
+    Timer { id: flash; interval: 2200; onTriggered: view.highlightId = 0 }
+    Timer { id: findDelay; interval: 250; onTriggered: view.runFind() }
     function capsFor(m) { return win.capsOf(win.chatById(m.chat)); }
     function sortMessages(list) { return list.sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id)); }
 
@@ -48,7 +92,7 @@ Rectangle {
             done();
         }, done));
     }
-    function loadEarlier() {
+    function loadEarlier(then) {
         if (loading || messages.length === 0) return;
         const id = win.current, scope = win.scope, ids = win.scopeIds();
         loading = true;
@@ -62,6 +106,7 @@ Rectangle {
             messages = sortMessages(acc.concat(messages));
             more = anyMore;
             list_.contentY = list_.contentHeight - keep;
+            if (then) then();
         };
         ids.forEach(cid => win.rpc("messages.list", { chat: cid, before: first, limit: 60 }, list => {
             acc = acc.concat(list);
@@ -82,6 +127,7 @@ Rectangle {
     }
     function byNative(id) { return messages.find(m => m.native_id === id) || null; }
     function focusComposer() { composer.focusInput(); }
+    function toggleRecording() { composer.toggleRecording(); }
     function replyToLast() {
         for (let i = messages.length - 1; i >= 0; i--) if (!messages[i].from_me && !messages[i].deleted) { win.replyTo = messages[i]; break; }
         composer.focusInput();
@@ -184,10 +230,44 @@ Rectangle {
         MouseArea { z: -1; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
     }
 
+    Rectangle {
+        id: findBar
+        visible: view.finding && win.current !== 0
+        anchors { top: head.bottom; left: parent.left; right: parent.right }
+        height: visible ? 40 : 0
+        color: FiliTheme.backgroundDeep
+        z: 6
+        Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
+        Field {
+            id: findField
+            anchors { left: parent.left; leftMargin: FiliTheme.margin; right: count.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
+            placeholderText: win.grouped && win.scope === 0 ? Conversations.tr("Find in all the conversations of this contact") : Conversations.tr("Find in this conversation")
+            onTextChanged: { view.findQuery = text; findDelay.restart(); }
+            Keys.onEscapePressed: view.closeFind()
+            Keys.onReturnPressed: e => view.stepFind((e.modifiers & Qt.ShiftModifier) ? 1 : -1)
+            Keys.onEnterPressed: e => view.stepFind((e.modifiers & Qt.ShiftModifier) ? 1 : -1)
+        }
+        Text {
+            id: count
+            anchors { right: nav.left; rightMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
+            text: view.findQuery.trim() === "" ? "" : (view.hits.length ? (view.hitIndex + 1) + " / " + view.hits.length : Conversations.tr("No message found"))
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.sizeList
+            color: FiliTheme.textSecondary
+        }
+        Row {
+            id: nav
+            anchors { right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
+            IconButton { name: "chevron-up"; tip: Conversations.tr("Older match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(1) }
+            IconButton { name: "chevron-down"; tip: Conversations.tr("Newer match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(-1) }
+            IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: view.closeFind() }
+        }
+    }
+
     ListView {
         id: list_
         visible: win.current !== 0
-        anchors { top: head.bottom; left: parent.left; right: parent.right; bottom: composer.top }
+        anchors { top: findBar.visible ? findBar.bottom : head.bottom; left: parent.left; right: parent.right; bottom: composer.top }
         clip: true
         model: view.messages
         boundsBehavior: Flickable.StopAtBounds
@@ -224,16 +304,26 @@ Rectangle {
                 id: bubble
                 y: (item.newDay ? 34 : 0) + (item.sameSender ? 0 : 6)
                 message: item.modelData
+                highlighted: item.modelData.id === view.highlightId
                 showPlatform: win.scope === 0 && win.grouped
                 showSender: view.group && !item.modelData.from_me && !item.sameSender
                 quoted: item.modelData.reply_to ? view.byNative(item.modelData.reply_to) : null
-                maxWidth: Math.min(560, list_.width * 0.78)
-                x: item.modelData.from_me ? list_.width - width - FiliTheme.margin : FiliTheme.margin
+                maxWidth: Math.min(560, list_.width * 0.78 - (win.scope === 0 && win.grouped ? 26 : 0))
+                x: item.modelData.from_me ? list_.width - width - FiliTheme.margin : FiliTheme.margin + (win.scope === 0 && win.grouped ? 26 : 0)
                 onMenu: (px, py) => {
                     const p = bubble.mapToItem(view, px, py);
                     view.openMenu(item.modelData, p.x, p.y, "all");
                 }
                 onRetry: win.rpc("message.retry", { message: item.modelData.id })
+            }
+            // The platform of the message, on its left (the views that mix several)
+            Rectangle {
+                visible: win.scope === 0 && win.grouped
+                x: bubble.x - 24
+                y: bubble.y + 4
+                width: 18; height: 18; radius: 9
+                color: win.platformColor(win.platformOf(win.chatById(item.modelData.chat)))
+                Text { anchors.centerIn: parent; text: win.platformName(win.platformOf(win.chatById(item.modelData.chat))).charAt(0); font.pixelSize: 11; font.bold: true; color: "white" }
             }
             // Actions shown while the pointer is over the message, on its bubble
             HoverHandler { id: hover }

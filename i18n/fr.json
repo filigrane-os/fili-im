@@ -324,5 +324,15 @@
  "All conversations": "Toutes les conversations",
  "Send on…": "Envoyer sur…",
  "%1 platforms": "%1 plateformes",
- "muted": "en sourdine"
+ "muted": "en sourdine",
+ "Record a voice message": "Enregistrer un message vocal",
+ "Recording…": "Enregistrement…",
+ "Recording failed": "L’enregistrement a échoué",
+ "The microphone cannot be recorded (pw-record and opusenc are needed)": "Le micro ne peut pas être enregistré (pw-record et opusenc sont nécessaires)",
+ "Find a conversation": "Chercher une conversation",
+ "Find in this conversation": "Chercher dans cette conversation",
+ "Find in all the conversations of this contact": "Chercher dans toutes les conversations de ce contact",
+ "Older match": "Résultat plus ancien",
+ "Newer match": "Résultat plus récent",
+ "Find in the conversation (all the platforms of a person in the first view)": "Chercher dans la conversation (toutes les plateformes d’un contact dans la première vue)"
 }

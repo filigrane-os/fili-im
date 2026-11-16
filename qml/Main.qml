@@ -47,9 +47,11 @@ ApplicationWindow {
     property int current: 0           // chat shown in the conversation view, 0 = none
     property var replyTo: null        // message being answered
     readonly property int unreadTotal: chats.reduce((n, c) => n + (c.unread > 0 ? c.unread : 0), 0)
+    property string listFilter: ""    // names typed in the list's filter
+    function plain(s) { return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
     readonly property var visibleChats: {
-        const f = filter;
-        return chats.filter(c => f === "all" || (f === "unread" ? c.unread > 0 : f === "account:" + c.account));
+        const f = filter, q = plain(listFilter.trim());
+        return chats.filter(c => (f === "all" || (f === "unread" ? c.unread > 0 : f === "account:" + c.account)) && (q === "" || plain(c.title).includes(q)));
     }
     function chatById(id) { return chats.find(c => c.id === id) || null; }
 
@@ -260,14 +262,21 @@ ApplicationWindow {
     Connections {
         target: Conversations
         function onCommand(name) {
-            if (name.startsWith("open-chat:")) { win.openChat(parseInt(name.slice(10))); win.raise(); win.requestActivate(); }
+            if (name.startsWith("open-chat:")) {
+                // A conversation of a person who has several: its own platform view (a notification of that platform)
+                const id = parseInt(name.slice(10));
+                win.openChat(id);
+                if (win.grouped && id !== win.current) win.setScope(id);
+                win.raise(); win.requestActivate();
+            }
             else if (name === "about") aboutCard.show();
             else if (name === "close") Qt.quit();
             else if (name === "window-actions") windowPanel.visible ? windowPanel.close() : windowPanel.open();
             else if (name === "toggle-header") win.showHeader = !win.showHeader;
             else if (name === "toggle-footer") win.showFooter = !win.showFooter;
             else if (name === "toggle-window-buttons") win.toggleWindowButtons();
-            else if (name === "search") win.openSearch();
+            else if (name === "search") { if (win.current) conversation.openFind(); else win.openSearch(); }
+            else if (name === "search-all") win.openSearch();
             else if (name === "all") win.filter = "all";
             else if (name === "unread-box") win.filter = "unread";
             else if (name === "next-tab") win.cycleTab(1);
@@ -280,6 +289,7 @@ ApplicationWindow {
             else if (name === "reply") conversation.replyToLast();
             else if (name === "focus-composer") conversation.focusComposer();
             else if (name.startsWith("status-")) rpc("presence.set", { state: name.slice(7) });
+            else if (name === "record-voice") conversation.toggleRecording();
             else if (name === "contact-info") { const c = chatById(current); if (c) showContact(c); }
             else if (name === "add-account") win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }));
             else if (name === "pair") sidebar.pairFirst();
@@ -294,7 +304,9 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+Shift+Tab"]; onActivated: win.cycleTab(-1) }
     Shortcut { sequences: ["Alt+Down"]; onActivated: win.cycleChat(1) }
     Shortcut { sequences: ["Alt+Up"]; onActivated: win.cycleChat(-1) }
-    Shortcut { sequences: ["Ctrl+F"]; onActivated: win.openSearch() }
+    // Ctrl+F looks in the open conversation (or in all the conversations of the person), Ctrl+Shift+F in every message
+    Shortcut { sequences: ["Ctrl+F"]; onActivated: win.current ? conversation.openFind() : win.openSearch() }
+    Shortcut { sequences: ["Ctrl+Shift+F"]; onActivated: win.openSearch() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+N"]; onActivated: switchCard.show() }
     Shortcut { sequences: ["F1", "Ctrl+/"]; onActivated: shortcutsCard.show() }
     Shortcut { sequences: ["Ctrl+U"]; onActivated: win.filter = win.filter === "unread" ? "all" : "unread" }

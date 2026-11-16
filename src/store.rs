@@ -290,8 +290,9 @@ impl Store {
         self.conn.execute(
             "INSERT INTO contacts(account, native_id, name, phone) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(account, native_id) DO UPDATE SET
-                 name = COALESCE(excluded.name, name), phone = COALESCE(excluded.phone, phone)",
-            params![account, contact.id, contact.name, contact.phone],
+                 name = CASE WHEN ?5 THEN COALESCE(name, excluded.name) ELSE COALESCE(excluded.name, name) END,
+                 phone = COALESCE(excluded.phone, phone)",
+            params![account, contact.id, contact.name, contact.phone, contact.name_weak],
         )?;
         Ok(())
     }
@@ -745,17 +746,22 @@ impl Store {
 
     /// Full-text search across every account, newest first. The query is plain words (no FTS syntax): each word must
     /// appear, the last one as a prefix.
-    pub fn search(&self, query: &str, limit: i64) -> Result<Vec<Value>> {
+    /// `chats`: only these conversations (none = all of them).
+    pub fn search(&self, query: &str, limit: i64, chats: Option<&[i64]>) -> Result<Vec<Value>> {
         let Some(fts) = fts_query(query) else { return Ok(Vec::new()) };
         let sql = format!(
             "SELECT m.id, {CHAT_TITLE} AS chat_title, c.account,
                  snippet(messages_fts, 0, '[', ']', '…', 12) AS snippet
              FROM messages_fts f JOIN messages m ON m.id = f.rowid JOIN chats c ON c.id = m.chat
-             WHERE messages_fts MATCH ?1 AND m.deleted = 0 ORDER BY m.ts DESC LIMIT ?2"
+             WHERE messages_fts MATCH ?1 AND m.deleted = 0
+                   AND (?3 IS NULL OR m.chat IN (SELECT value FROM json_each(?3)))
+             ORDER BY m.ts DESC LIMIT ?2"
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let hits: Vec<(i64, String, String, String)> = stmt
-            .query_map(params![fts, limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .query_map(params![fts, limit, chats.map(|c| serde_json::to_string(c).unwrap_or_default())], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?
             .collect::<rusqlite::Result<_>>()?;
         let mut out = Vec::new();
         for (id, title, account, snippet) in hits {
@@ -869,6 +875,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_name_people_gave_themselves_never_replaces_an_address_book_name() {
+        let (store, key) = store_with_account();
+        let book = |name: &str| Contact { id: "p".into(), name: Some(name.into()), phone: None, name_weak: false };
+        let pushed = |name: &str| Contact { id: "p".into(), name: Some(name.into()), phone: None, name_weak: true };
+        // A push name fills a missing name...
+        store.upsert_contact(&key, &pushed("Fatine")).unwrap();
+        let title = |store: &Store| -> String {
+            store.conn.query_row("SELECT name FROM contacts WHERE native_id = 'p'", [], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(title(&store), "Fatine");
+        // ...the address book replaces it...
+        store.upsert_contact(&key, &book("Sam")).unwrap();
+        assert_eq!(title(&store), "Sam");
+        // ...and a later push name does not take it back.
+        store.upsert_contact(&key, &pushed("Fatine")).unwrap();
+        assert_eq!(title(&store), "Sam");
+    }
+
     fn store_with_account() -> (Store, String) {
         let store = Store::open_in_memory().unwrap();
         let key = store.add_account("fake").unwrap();
@@ -905,7 +930,9 @@ mod tests {
         let (store, key) = store_with_account();
         store.put_message(&key, &msg("a", "paul", Some("paul"), 1, "hi"), true).unwrap();
         store.put_message(&key, &msg("b", "x", Some("x"), 2, "hi"), true).unwrap();
-        store.upsert_contact(&key, &Contact { id: "paul".into(), name: Some("Paul".into()), phone: None }).unwrap();
+        store
+            .upsert_contact(&key, &Contact { id: "paul".into(), name: Some("Paul".into()), phone: None, name_weak: false })
+            .unwrap();
         let titles: Vec<String> =
             store.chats(None, false, 10).unwrap().iter().map(|c| c["title"].as_str().unwrap().to_string()).collect();
         assert_eq!(titles, vec!["x", "Paul"]);
@@ -921,7 +948,9 @@ mod tests {
                 &Chat { id: "fam".into(), kind: Some("group".into()), title: Some("Family".into()), ..Default::default() },
             )
             .unwrap();
-        store.upsert_contact(&key, &Contact { id: "lea".into(), name: Some("Léa".into()), phone: None }).unwrap();
+        store
+            .upsert_contact(&key, &Contact { id: "lea".into(), name: Some("Léa".into()), phone: None, name_weak: false })
+            .unwrap();
         store.put_message(&key, &msg("a", "fam", Some("lea"), 1, "dinner?"), true).unwrap();
         assert_eq!(store.recent_unread(5).unwrap(), vec![("Family".to_string(), "Léa: dinner?".to_string())]);
         store.upsert_chat(&key, &Chat { id: "fam".into(), muted_until: Some(-1), ..Default::default() }).unwrap();
@@ -1004,13 +1033,13 @@ mod tests {
         let (store, key) = store_with_account();
         store.put_message(&key, &msg("a", "paul", Some("paul"), 1, "On mange au café ?"), true).unwrap();
         store.put_message(&key, &msg("b", "paul", Some("paul"), 2, "secret"), true).unwrap();
-        assert_eq!(store.search("cafe", 10).unwrap().len(), 1, "accents ignored, prefix match");
-        assert_eq!(store.search("mange caf", 10).unwrap().len(), 1);
-        assert!(store.search("\"; DROP", 10).unwrap().is_empty());
-        assert!(store.search("   ", 10).unwrap().is_empty());
+        assert_eq!(store.search("cafe", 10, None).unwrap().len(), 1, "accents ignored, prefix match");
+        assert_eq!(store.search("mange caf", 10, None).unwrap().len(), 1);
+        assert!(store.search("\"; DROP", 10, None).unwrap().is_empty());
+        assert!(store.search("   ", 10, None).unwrap().is_empty());
         store.edit_message(&key, "paul", "a", &Text::plain("On mange à la cantine"), None).unwrap();
-        assert!(store.search("cafe", 10).unwrap().is_empty());
-        assert_eq!(store.search("cantine", 10).unwrap()[0]["edited"], true);
+        assert!(store.search("cafe", 10, None).unwrap().is_empty());
+        assert_eq!(store.search("cantine", 10, None).unwrap()[0]["edited"], true);
         let id = store.react(&key, "paul", "b", None, "👍", None).unwrap().unwrap();
         store.react(&key, "paul", "b", Some("paul"), "❤️", None).unwrap();
         assert_eq!(store.message_view(id).unwrap().unwrap()["reactions"].as_array().unwrap().len(), 2);
@@ -1020,7 +1049,7 @@ mod tests {
         let view = store.message_view(id).unwrap().unwrap();
         assert_eq!(view["deleted"], true);
         assert_eq!(view["text"]["plain"], "");
-        assert!(store.search("secret", 10).unwrap().is_empty());
+        assert!(store.search("secret", 10, None).unwrap().is_empty());
     }
 
     #[test]
@@ -1029,7 +1058,7 @@ mod tests {
         store.put_message(&key, &msg("a", "paul", Some("paul"), 1, "x"), true).unwrap();
         store.remove_account(&key).unwrap();
         assert!(store.chats(None, false, 10).unwrap().is_empty());
-        assert!(store.search("x", 10).unwrap().is_empty());
+        assert!(store.search("x", 10, None).unwrap().is_empty());
     }
 
     #[test]
