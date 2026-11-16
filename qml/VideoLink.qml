@@ -19,6 +19,8 @@ Item {
     readonly property int position: player.position
     signal expand(int position)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
+    // Looking the stream up, or the player waiting for data: the loader shows, the play button does not
+    readonly property bool waiting: phase === "resolving" || (phase === "ready" && (player.mediaStatus === MediaPlayer.NoMedia || player.mediaStatus === MediaPlayer.LoadingMedia || player.mediaStatus === MediaPlayer.StalledMedia || player.mediaStatus === MediaPlayer.BufferingMedia))
 
     function start() {
         if (phase === "resolving") return;
@@ -68,7 +70,7 @@ Item {
 
     // Play button, loading and failure
     Rectangle {
-        visible: v.phase === "idle" || (v.phase === "ready" && !v.playing && player.position === 0)
+        visible: v.phase === "idle" || (v.phase === "ready" && !v.waiting && !v.playing && player.position === 0)
         anchors.centerIn: parent
         width: v.compact ? 44 : 64
         height: width
@@ -82,7 +84,7 @@ Item {
         size: v.compact ? 80 : 140
         onDark: true
         backdrop: true
-        visible: v.phase === "resolving" || (v.phase === "ready" && (player.mediaStatus === MediaPlayer.LoadingMedia || player.mediaStatus === MediaPlayer.StalledMedia || player.mediaStatus === MediaPlayer.BufferingMedia))
+        visible: v.waiting
     }
     Column {
         visible: v.phase === "error"

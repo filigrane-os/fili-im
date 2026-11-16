@@ -58,6 +58,11 @@ Item {
         height: 360
         scale: s.width / 1135
         transformOrigin: Item.TopLeft
+        // Smooth edges: the veils are drawn into a multisampled layer, at the size they are shown (not at 1135 and scaled)
+        layer.enabled: true
+        layer.samples: 8
+        layer.smooth: true
+        layer.textureSize: Qt.size(Math.max(1, Math.round(s.width * 2 * Screen.devicePixelRatio)), Math.max(1, Math.round(s.height * 2 * Screen.devicePixelRatio)))
         Repeater {
             model: s.veils.length
             // One Shape per veil (a ShapePath must be a direct child of its Shape)
