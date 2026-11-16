@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 - 2026-11-16
+
+- A conversation view that stays put: messages go through a ListModel updated in place (no rebuild of every bubble
+  when one comes in or changes), the view stays at the very end after a send or a receipt until you scroll.
 
 - Clicking a quoted message (a reply) goes to the original message and flashes it.
 - Pictures in a message are shown in cover mode: a tall picture fills its box (cropped) instead of floating in black
