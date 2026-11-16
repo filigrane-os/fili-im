@@ -3,13 +3,13 @@ module github.com/filigrane-os/fili-im/connectors/gmessages
 go 1.26.0
 
 require (
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/rs/zerolog v1.35.1
 	go.mau.fi/mautrix-gmessages v0.2610.0
 	go.mau.fi/util v0.11.0
 )
 
 require (
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
