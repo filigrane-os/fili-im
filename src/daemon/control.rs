@@ -180,6 +180,7 @@ async fn call(daemon: &Arc<Daemon>, method: &str, params: &Map<String, Value>) -
         "account.pair" => {
             let key = str_param(params, "account")?;
             let conn = daemon.connector(key).ok_or_else(|| ErrorBody::new("not_found", "no such account"))?;
+            conn.wait_hello().await; // the stored capabilities (the default method) come with its hello
             let method = match params.get("method").and_then(Value::as_str) {
                 Some(m) => m.to_string(),
                 None => store().capabilities(key).map_err(internal)?.pairing.first().cloned().unwrap_or_default(),
