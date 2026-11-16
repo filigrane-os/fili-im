@@ -64,6 +64,7 @@ Rectangle {
     function sortMessages(list) { return list.sort((a, b) => (a.timestamp - b.timestamp) || (a.id - b.id)); }
 
     function toLatest() {
+        list_.follow = true;
         list_.positionViewAtEnd();
         // The delegates under the end have estimated heights until they are built: settle once they are
         Qt.callLater(() => list_.positionViewAtEnd());
@@ -83,6 +84,7 @@ Rectangle {
             if (id !== win.current || scope !== win.scope) return;
             messages = sortMessages(acc);
             more = anyMore;
+            list_.follow = true;
             list_.positionViewAtEnd();
         };
         // Every conversation of the person is read and mixed by date
@@ -115,7 +117,7 @@ Rectangle {
         }, done));
     }
     function apply(m) {
-        const atEnd = list_.atYEnd;
+        const atEnd = list_.atYEnd || (m.from_me && !messages.some(x => x.id === m.id));
         const i = messages.findIndex(x => x.id === m.id);
         const copy = messages.slice();
         if (i >= 0) copy[i] = m; else copy.push(m);
@@ -127,6 +129,11 @@ Rectangle {
     }
     function byNative(id) { return messages.find(m => m.native_id === id) || null; }
     function focusComposer() { composer.focusInput(); }
+    // Quick Look on the latest picture, video or video link of the conversation
+    function quickLookLast() {
+        for (let i = messages.length - 1; i >= 0; i--)
+            if (!messages[i].deleted && (messages[i].media || quickLookCard.linkItem(messages[i]))) { win.quickLook(messages[i].id); return; }
+    }
     function toggleRecording() { composer.toggleRecording(); }
     function replyToLast() {
         for (let i = messages.length - 1; i >= 0; i--) if (!messages[i].from_me && !messages[i].deleted) { win.replyTo = messages[i]; break; }
@@ -298,6 +305,12 @@ Rectangle {
         spacing: 2
         KineticScroll {}
         onAtYEndChanged: if (atYEnd) view.unseen = 0
+        // The view stays at the bottom while the composer grows (long text, reply bar, files) or messages come in,
+        // as long as it was at the bottom: `follow` changes only when the content moves (the user scrolls)
+        property bool follow: true
+        onContentYChanged: follow = atYEnd
+        onHeightChanged: if (follow) positionViewAtEnd()
+        onContentHeightChanged: if (follow) Qt.callLater(positionViewAtEnd)
         header: Item {
             width: list_.width
             height: view.more ? 32 : 0
@@ -306,6 +319,8 @@ Rectangle {
         }
         delegate: Item {
             id: item
+            // The hovered message (and its action bar) is drawn above the others, whatever the order they were built in
+            z: hover.hovered || toolsHover.hovered ? 100 : 1
             required property var modelData
             required property int index
             readonly property var previous: index > 0 ? view.messages[index - 1] : null
@@ -450,6 +465,7 @@ Rectangle {
         chat: view.chat
         caps: view.caps
         onPlatformMenu: (x, y) => { const p = composer.mapToItem(view, x, y); menu.message = null; menu.openAt(p.x, p.y - 10 - win.group.length * 26, win.group.map(c => ({ id: "target:" + c.id, label: (c.id === win.targetChat.id ? "● " : "○ ") + win.platformName(win.platformOf(c)) }))); }
+        onSent: view.toLatest()
         lastMine: { for (let i = view.messages.length - 1; i >= 0; i--) if (view.messages[i].from_me && !view.messages[i].deleted && view.messages[i].kind === "text") return view.messages[i]; return null; }
     }
 

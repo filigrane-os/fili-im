@@ -90,6 +90,7 @@ type Command struct {
 	Archived bool            `json:"archived"`
 	Media    json.RawMessage `json:"media"`
 	State    string          `json:"state"`
+	Retry    bool            `json:"retry"`
 }
 
 // Out writes protocol lines; safe from any goroutine (whatsmeow's handlers, command goroutines).

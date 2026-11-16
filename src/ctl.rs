@@ -39,6 +39,7 @@ pub const ACTIONS: &[&str] = &[
     "focus-composer",
     "contact-info",
     "record-voice",
+    "quick-look",
     "status-available",
     "status-away",
     "status-busy",

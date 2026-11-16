@@ -11,6 +11,7 @@ Rectangle {
     property var caps
     property var lastMine: null
     signal platformMenu(real x, real y)
+    signal sent()
     // In the view of all the conversations of a person: which platform the message goes to
     readonly property bool choosing: win.grouped && win.scope === 0
     property var editing: null
@@ -53,6 +54,7 @@ Rectangle {
             win.rpc("send", { chat: c.chat.id, text: "", media: { path: file, kind: "voice", mime: "audio/ogg; codecs=opus" }, reply_to: win.replyTo ? win.replyTo.native_id : undefined },
                 () => Conversations.discardVoice(file), () => Conversations.discardVoice(file));
             c.cancel();
+            c.sent();
         }
     }
     function clock(ms) { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
@@ -81,6 +83,7 @@ Rectangle {
         } else win.rpc("send", { chat: chat.id, text: text, reply_to: win.replyTo ? win.replyTo.native_id : undefined });
         input.text = "";
         cancel();
+        c.sent();
     }
     Connections { target: win; function onCurrentChanged() { c.cancel(); c.files = []; input.text = ""; } }
 

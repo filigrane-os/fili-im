@@ -169,6 +169,182 @@ fn is_private(ip: IpAddr) -> bool {
     }
 }
 
+/// What yt-dlp found for a video page, reduced to what the player needs: `{title, duration, stream}`, `stream` being one
+/// address that carries picture and sound (a muxed file, or the HLS master playlist that holds both parts).
+pub fn video_from_ytdlp(info: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for k in ["title", "duration"] {
+        if let Some(v) = info.get(k).filter(|v| !v.is_null()) {
+            out.insert(k.into(), v.clone());
+        }
+    }
+    let stream = match info.get("requested_formats").and_then(Value::as_array) {
+        // Picture and sound as two files cannot be played together; as two parts of one master playlist they can
+        Some(parts) => {
+            let masters: Vec<&str> = parts.iter().filter_map(|p| p.get("manifest_url").and_then(Value::as_str)).collect();
+            (masters.len() == parts.len() && masters.windows(2).all(|w| w[0] == w[1])).then(|| masters[0].to_string())
+        }
+        None => info.get("url").and_then(Value::as_str).map(str::to_owned),
+    };
+    match stream {
+        Some(s) => out.insert("stream".into(), json!(s)),
+        None => out.insert("error".into(), json!("no single stream")),
+    };
+    Value::Object(out)
+}
+
+/// The master playlist of an HLS stream reduced to one variant: the best H.264 one up to `max_height` (a player left
+/// alone starts with the smallest), its default audio, and no subtitles. `None` when it has no variant.
+pub fn pick_variant(master: &str, max_height: u32) -> Option<String> {
+    let attr = |line: &str, name: &str| -> Option<String> {
+        let at = line.find(&format!("{name}="))? + name.len() + 1;
+        let rest = &line[at..];
+        Some(match rest.strip_prefix('"') {
+            Some(q) => q.split('"').next()?.to_string(),
+            None => rest.split(',').next()?.to_string(),
+        })
+    };
+    let lines: Vec<&str> = master.lines().map(str::trim).collect();
+    let mut best: Option<(bool, u32, u64, &str, &str)> = None; // (h264 within limit, height, bandwidth, inf line, uri)
+    for (i, line) in lines.iter().enumerate() {
+        if !line.starts_with("#EXT-X-STREAM-INF") {
+            continue;
+        }
+        let Some(uri) = lines.get(i + 1).filter(|u| !u.starts_with('#') && !u.is_empty()) else { continue };
+        let height = attr(line, "RESOLUTION").and_then(|r| r.split('x').nth(1)?.parse::<u32>().ok()).unwrap_or(0);
+        let bandwidth = attr(line, "BANDWIDTH").and_then(|b| b.parse::<u64>().ok()).unwrap_or(0);
+        let h264 = attr(line, "CODECS").is_some_and(|c| c.contains("avc1"));
+        let within = height <= max_height;
+        // Rank: within the limit and H.264 first, then the taller, then the heavier (the smallest when none fits)
+        let rank = (within && h264, if within { height } else { u32::MAX - height }, bandwidth);
+        if best.as_ref().is_none_or(|b| rank > (b.0, b.1, b.2)) {
+            best = Some((rank.0, rank.1, rank.2, line, uri));
+        }
+    }
+    let (_, _, _, inf, uri) = best?;
+    let group = attr(inf, "AUDIO");
+    let mut out = String::from("#EXTM3U\n#EXT-X-INDEPENDENT-SEGMENTS\n");
+    if let Some(group) = &group {
+        let audio: Vec<&&str> = lines
+            .iter()
+            .filter(|l| {
+                l.starts_with("#EXT-X-MEDIA")
+                    && attr(l, "TYPE").as_deref() == Some("AUDIO")
+                    && attr(l, "GROUP-ID").as_ref() == Some(group)
+            })
+            .collect();
+        let chosen = audio.iter().find(|l| attr(l, "DEFAULT").as_deref() == Some("YES")).or(audio.first());
+        if let Some(l) = chosen {
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    // The variant line without its subtitles
+    let mut inf = inf.to_string();
+    if let Some(s) = inf.find("SUBTITLES=\"") {
+        let end = inf[s + 11..].find('"').map_or(inf.len(), |e| s + 11 + e + 1);
+        inf.replace_range(s..end, "");
+        inf = inf.replace(",,", ",").replace(",\n", "\n");
+        if inf.ends_with(',') {
+            inf.pop();
+        }
+    }
+    out.push_str(&inf);
+    out.push('\n');
+    out.push_str(uri);
+    out.push('\n');
+    Some(out)
+}
+
+/// Playlists served to the player on 127.0.0.1 (one unguessable path each).
+fn serve_playlist(body: String) -> Option<String> {
+    use std::collections::HashMap;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Table = Arc<Mutex<HashMap<String, String>>>;
+    static SERVER: OnceLock<(u16, Table)> = OnceLock::new();
+    let (port, table) = SERVER.get_or_init(|| {
+        let table: Table = Arc::default();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free local port");
+        let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
+        let shared = table.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let shared = shared.clone();
+                std::thread::spawn(move || {
+                    let mut stream = stream;
+                    let mut buf = [0u8; 2048];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buf[..n]);
+                    let path = request.lines().next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("/").trim_start_matches('/').to_string();
+                    let body = shared.lock().unwrap().get(&path).cloned();
+                    let reply = match body {
+                        Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len()),
+                        None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+                    };
+                    let _ = stream.write_all(reply.as_bytes());
+                });
+            }
+        });
+        (port, table)
+    });
+    let mut raw = [0u8; 12];
+    std::fs::File::open("/dev/urandom").ok()?.read_exact(&mut raw).ok()?;
+    let token: String = raw.iter().map(|b| format!("{b:02x}")).collect::<String>() + ".m3u8";
+    table.lock().unwrap().insert(token.clone(), body);
+    Some(format!("http://127.0.0.1:{port}/{token}"))
+}
+
+/// A stream address for the player: an HLS master playlist is narrowed to one good variant and served locally.
+fn playable(stream: &str) -> String {
+    if !stream.contains(".m3u8") && !stream.contains("/hls_variant/") && !stream.contains("manifest") {
+        return stream.to_string();
+    }
+    let master = Command::new("curl")
+        .args(["-sL", "--max-time", "15", "--compressed", "--"])
+        .arg(stream)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    master
+        .filter(|m| m.contains("#EXT-X-STREAM-INF"))
+        .and_then(|m| pick_variant(&m, 720))
+        .and_then(serve_playlist)
+        .unwrap_or_else(|| stream.to_string())
+}
+
+/// Ask yt-dlp about a video page (YouTube, Instagram, TikTok, Vimeo… whatever it knows).
+pub fn resolve_video(url: &str) -> Value {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return json!({"error": "not a web address"});
+    }
+    let run = Command::new("yt-dlp")
+        .args(["--no-playlist", "--no-warnings", "--socket-timeout", "15", "-j"])
+        .args(["-f", "b[protocol^=https][height<=720]/bv*[protocol^=m3u8][height<=720]+ba[protocol^=m3u8]/b[height<=720]/b"])
+        .arg("--")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+    match run {
+        Ok(out) if out.status.success() => match serde_json::from_slice::<Value>(&out.stdout) {
+            Ok(info) => {
+                let mut v = video_from_ytdlp(&info);
+                if let Some(stream) = v.get("stream").and_then(Value::as_str).map(playable) {
+                    v["stream"] = json!(stream);
+                }
+                v
+            }
+            Err(_) => json!({"error": "unreadable answer"}),
+        },
+        Ok(_) => json!({"error": "this video cannot be read"}),
+        Err(_) => json!({"error": "yt-dlp is not installed"}),
+    }
+}
+
 /// Fetch a page's start and read it. `None`: not a web address, a private one, unreachable or not a page.
 pub fn fetch(url: &str) -> Option<Value> {
     let (scheme, rest) = url.split_once("://")?;
@@ -239,6 +415,36 @@ mod tests {
         assert_eq!(v["description"], "Le résumé é de la page");
         assert_eq!(v["image"], "https://example.org/img/cover.jpg");
         assert_eq!(v["site"], "Le Site");
+    }
+
+    #[test]
+    fn a_stream_is_one_address_with_picture_and_sound() {
+        let muxed = json!({"title": "t", "duration": 5, "url": "https://x/v.mp4"});
+        assert_eq!(video_from_ytdlp(&muxed)["stream"], "https://x/v.mp4");
+        let hls =
+            json!({"requested_formats": [{"manifest_url": "https://x/master.m3u8"}, {"manifest_url": "https://x/master.m3u8"}]});
+        assert_eq!(video_from_ytdlp(&hls)["stream"], "https://x/master.m3u8");
+        let split = json!({"requested_formats": [{"url": "https://x/v.mp4"}, {"url": "https://x/a.m4a"}]});
+        assert!(video_from_ytdlp(&split).get("stream").is_none(), "two files cannot be played together");
+    }
+
+    #[test]
+    fn a_master_playlist_is_narrowed_to_one_good_variant_with_its_audio() {
+        let master = "#EXTM3U\n#EXT-X-MEDIA:URI=\"https://a/233.m3u8\",TYPE=AUDIO,GROUP-ID=\"233\",NAME=\"Default\",DEFAULT=YES\n\
+#EXT-X-MEDIA:URI=\"https://a/234.m3u8\",TYPE=AUDIO,GROUP-ID=\"234\",NAME=\"Default\",DEFAULT=YES\n\
+#EXT-X-MEDIA:URI=\"https://s/en.m3u8\",TYPE=SUBTITLES,GROUP-ID=\"vtt\",NAME=\"English\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=300000,CODECS=\"avc1.4D4015,mp4a.40.5\",RESOLUTION=426x240,AUDIO=\"233\",SUBTITLES=\"vtt\",CLOSED-CAPTIONS=NONE\nhttps://v/240.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1248435,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=1280x720,AUDIO=\"234\",SUBTITLES=\"vtt\",CLOSED-CAPTIONS=NONE\nhttps://v/720.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=1048474,CODECS=\"vp09.00.31.08,mp4a.40.2\",RESOLUTION=1280x720,AUDIO=\"234\",SUBTITLES=\"vtt\"\nhttps://v/720vp9.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=4688074,CODECS=\"avc1.640028,mp4a.40.2\",RESOLUTION=1920x1080,AUDIO=\"234\",SUBTITLES=\"vtt\"\nhttps://v/1080.m3u8\n";
+        let one = pick_variant(master, 720).unwrap();
+        assert!(one.contains("https://v/720.m3u8"), "{one}");
+        assert!(!one.contains("1080") && !one.contains("240") && !one.contains("vp9"), "{one}");
+        assert!(one.contains("GROUP-ID=\"234\"") && !one.contains("GROUP-ID=\"233\""), "{one}");
+        assert!(!one.contains("SUBTITLES") && !one.contains("vtt"), "{one}");
+        assert!(one.contains("AUDIO=\"234\""));
+        // Nothing within the limit: the smallest
+        assert!(pick_variant(master, 100).unwrap().contains("https://v/240.m3u8"));
     }
 
     #[test]

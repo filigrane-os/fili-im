@@ -347,5 +347,10 @@
  "Find in Conversation…": "Chercher dans la conversation…",
  "Show Only This Account": "Afficher uniquement ce compte",
  "Mark All as Read": "Tout marquer comme lu",
- "Reconnect": "Reconnecter"
+ "Reconnect": "Reconnecter",
+ "No longer on the server: click to ask the phone": "Plus sur le serveur : cliquer pour le redemander au téléphone",
+ "Loading the video…": "Chargement de la vidéo…",
+ "This video cannot be played here": "Cette vidéo ne peut pas être lue ici",
+ "Play in mpv": "Lire dans mpv",
+ "Open in Quick Look": "Ouvrir dans le Quick Look"
 }

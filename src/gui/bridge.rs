@@ -105,6 +105,13 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "linkPreview"]
         fn link_preview(self: Pin<&mut Conversations>, id: i32, json: &QString);
+        // The address of a video page's stream (yt-dlp), for the player: the answer comes as `videoResolved`
+        #[qinvokable]
+        #[cxx_name = "resolveVideo"]
+        fn resolve_video(self: Pin<&mut Conversations>, url: &QString) -> i32;
+        #[qsignal]
+        #[cxx_name = "videoResolved"]
+        fn video_resolved(self: Pin<&mut Conversations>, id: i32, json: &QString);
         // [links] previews: "all" (default), "youtube" or "off"
         #[qinvokable]
         #[cxx_name = "linkMode"]
@@ -350,6 +357,19 @@ impl qobject::Conversations {
                 json
             });
             let _ = qt.queue(move |c| c.link_preview(id, &QString::from(json.as_str())));
+        });
+        id
+    }
+
+    pub fn resolve_video(self: Pin<&mut Self>, url: &QString) -> i32 {
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static NEXT: AtomicI32 = AtomicI32::new(1);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let url = url.to_string();
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let json = crate::preview::resolve_video(&url).to_string();
+            let _ = qt.queue(move |c| c.video_resolved(id, &QString::from(json.as_str())));
         });
         id
     }

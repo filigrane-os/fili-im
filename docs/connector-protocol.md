@@ -208,7 +208,7 @@ Non-fatal, logged and shown in the footer.
 | `typing` | `chat`, `active` | `{}` | `typing.send` |
 | `avatar` | `chat`, `dest` | `{}` (a picture saved at `dest`), or `not_found` | `avatars` |
 | `presence` | `state` (`available`, `unavailable`) | `{}` | `presence` |
-| `fetch_media` | `chat`, `message`, `ref`, `dest` (file path to write) | `{path}` | |
+| `fetch_media` | `chat`, `message`, `ref`, `dest` (file path to write), `retry` (when the server no longer has the file, ask the phone to upload it again and wait for it) | `{path}`, or the error `expired` when the file is gone and cannot be had again | |
 | `stream` | `chat`, `message`, `ref` | `{url, mime}` | `streaming` |
 | `backfill` | `chat`, `before` (message id), `limit` | `{}` then `history.batch` | `history: on_demand` |
 | `chat.mute` | `chat`, `until` (0, -1, timestamp) | `{}` | |

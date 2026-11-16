@@ -42,6 +42,8 @@ Rectangle {
     property var og: ({})
     property int ogId: 0
     readonly property bool ogWanted: linkUrl !== "" && ytId === "" && !videoLink && linkMode === "all" && !message.deleted && !hasMedia
+    // Pages that hold a video yt-dlp can play (other than YouTube, which has its own card)
+    readonly property bool siteVideo: ytId === "" && /^https?:\/\/(www\.)?(instagram\.com\/(reel|reels|p|tv)\/|tiktok\.com\/|vimeo\.com\/\d|dailymotion\.com\/video|(x|twitter)\.com\/[^\/]+\/status|facebook\.com\/(watch|reel)|fb\.watch|clips\.twitch\.tv|twitch\.tv\/[^\/]+\/clip)/i.test(linkUrl)
     readonly property bool ogShown: ogWanted && (og.title !== undefined || og.image !== undefined)
     Connections {
         target: Conversations
@@ -73,17 +75,21 @@ Rectangle {
     readonly property real pictureWidth: Math.min(280, b.inner)
     property string mediaPath: ""
     property bool fetching: false
+    property bool expired: false      // the server no longer has the file: a click asks the phone for it again
     function fetchMedia(thenOpen) {
         if (fetching) return;
-        if (mediaPath !== "") { if (thenOpen) Conversations.openUrl("file://" + encodeURI(mediaPath)); return; }
+        if (mediaPath !== "") { if (thenOpen) win.quickLook(message.id); return; }
         fetching = true;
-        win.rpc("media.fetch", { message: message.id }, r => {
+        // Only a click asks the phone again (automatic fetches stay quiet)
+        win.rpc("media.fetch", { message: message.id, retry: thenOpen }, r => {
+            expired = false;
             fetching = false;
             mediaPath = r.path;
             thumbPath = r.thumb || "";
-            if (thenOpen) Conversations.openUrl("file://" + encodeURI(r.path));
+            if (thenOpen) win.quickLook(message.id);
         }, e => {
             fetching = false;
+            expired = !!(e && e.code === "expired");
             // Pictures fetched on their own (expired files, offline) stay quiet; a click that fails says so
             if (thenOpen) win.notice = (e && e.message) || Conversations.tr("The file could not be downloaded");
         });
@@ -212,12 +218,12 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 visible: picture.shown.status !== Image.Ready
-                text: b.fetching ? Conversations.tr("Downloading…") : (b.mediaPath === "" ? "▣" : "")
+                text: b.fetching ? Conversations.tr("Downloading…") : (b.mediaPath === "" ? (b.expired ? Conversations.tr("No longer on the server: click to ask the phone") : "▣") : "")
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: b.isPicture && b.mediaPath === "" ? b.fetchMedia(true) : win.quickLook(b.message.id) }
         }
         Text {
             visible: b.showsPicture && b.mediaInfo !== ""
@@ -274,21 +280,15 @@ Rectangle {
             radius: FiliTheme.radiusControl
             color: FiliTheme.backgroundDeep
             clip: true
-            Image {
+            // The thumbnail plays the video in place when clicked; the button on it opens Quick Look
+            VideoLink {
                 id: ytThumb
                 width: parent.width
                 height: width * 9 / 16
-                source: b.card ? "https://i.ytimg.com/vi/" + b.ytId + "/mqdefault.jpg" : ""
-                asynchronous: true
-                fillMode: Image.PreserveAspectCrop
-            }
-            Rectangle {
-                anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: ytThumb.verticalCenter }
-                width: 44
-                height: 44
-                radius: 22
-                color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
-                Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
+                url: b.card ? b.linkUrl : ""
+                poster: b.card ? "https://i.ytimg.com/vi/" + b.ytId + "/mqdefault.jpg" : ""
+                compact: true
+                onExpand: win.quickLook(b.message.id)
             }
             Text {
                 id: titleText
@@ -303,7 +303,6 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.text
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: win.quickLook(b.message.id) }
         }
         Text {
             visible: b.card
@@ -325,8 +324,18 @@ Rectangle {
             Column {
                 id: ogColumn
                 width: parent.width
+                // A page that is a video (Instagram, TikTok, Vimeo…): the picture plays it in place
+                VideoLink {
+                    visible: b.siteVideo
+                    width: parent.width
+                    height: visible ? Math.round(width * 9 / 16) : 0
+                    url: b.siteVideo ? b.linkUrl : ""
+                    poster: b.og.image || ""
+                    compact: true
+                    onExpand: win.quickLook(b.message.id)
+                }
                 Image {
-                    visible: b.og.image !== undefined && status !== Image.Error
+                    visible: !b.siteVideo && b.og.image !== undefined && status !== Image.Error
                     width: parent.width
                     height: visible && status === Image.Ready ? Math.round(width * 0.52) : 0
                     source: b.ogShown && b.og.image ? b.og.image : ""
@@ -381,7 +390,7 @@ Rectangle {
                     }
                 }
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Conversations.openUrl(b.linkUrl) }
+            MouseArea { anchors.fill: parent; z: -1; cursorShape: Qt.PointingHandCursor; onClicked: Conversations.openUrl(b.linkUrl) }
         }
         Rectangle {
             visible: b.videoLink

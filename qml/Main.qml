@@ -354,6 +354,7 @@ ApplicationWindow {
             else if (name === "reply") conversation.replyToLast();
             else if (name === "focus-composer") conversation.focusComposer();
             else if (name.startsWith("status-")) rpc("presence.set", { state: name.slice(7) });
+            else if (name === "quick-look") conversation.quickLookLast();
             else if (name === "record-voice") conversation.toggleRecording();
             else if (name === "contact-info") { const c = chatById(current); if (c) showContact(c); }
             else if (name === "add-account") win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }));

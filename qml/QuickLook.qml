@@ -24,6 +24,7 @@ Rectangle {
     readonly property string path: current ? (current.kind === "videourl" ? current.url : (paths[current.id] || streams[current.id] || "")) : ""
     readonly property bool remote: path.indexOf("http") === 0
     readonly property bool isYoutube: kind === "youtube"
+    readonly property bool isPage: kind === "youtube" || kind === "sitevideo"
     property var titles: ({})
     property string playerError: ""
     readonly property bool isPicture: kind === "image" || kind === "sticker"
@@ -38,6 +39,7 @@ Rectangle {
         const yt = /(?:youtube\.com\/(?:watch\?(?:[^\s#]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/.exec(url);
         if (yt) return Conversations.linkPreviews() ? { id: m.id, m: m, kind: "youtube", url: url, vid: yt[1] } : null;
         if (/\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i.test(url)) return { id: m.id, m: m, kind: "videourl", url: url };
+        if (/^https?:\/\/(www\.)?(instagram\.com\/(reel|reels|p|tv)\/|tiktok\.com\/|vimeo\.com\/\d|dailymotion\.com\/video|(x|twitter)\.com\/[^\/]+\/status|facebook\.com\/(watch|reel)|fb\.watch|clips\.twitch\.tv|twitch\.tv\/[^\/]+\/clip)/i.test(url)) return { id: m.id, m: m, kind: "sitevideo", url: url };
         return null;
     }
     function open(messages, id) {
@@ -108,12 +110,12 @@ Rectangle {
         if (current.url) { Conversations.openUrl(current.url); return; }
         const m = current;
         if (paths[m.id]) { Conversations.openUrl("file://" + encodeURI(paths[m.id])); return; }
-        win.rpc("media.fetch", { message: m.id }, r => Conversations.openUrl("file://" + encodeURI(r.path)));
+        win.rpc("media.fetch", { message: m.id, retry: true }, r => Conversations.openUrl("file://" + encodeURI(r.path)));
     }
     function fetch(m) {
         if (inflight[m.id]) return;
         inflight[m.id] = true;
-        win.rpc("media.fetch", { message: m.id }, r => {
+        win.rpc("media.fetch", { message: m.id, retry: true }, r => {
             const p = Object.assign({}, paths); p[m.id] = r.path; paths = p;
         }, e => {
             const f = Object.assign({}, failed); f[m.id] = (e && e.message) || Conversations.tr("The file could not be downloaded"); failed = f;
@@ -146,7 +148,7 @@ Rectangle {
     Keys.onEscapePressed: close()
     Keys.onLeftPressed: go(-1)
     Keys.onRightPressed: go(1)
-    Keys.onSpacePressed: isYoutube ? playLink() : playable && path !== "" ? togglePlay() : close()
+    Keys.onSpacePressed: isPage ? close() : playable && path !== "" ? togglePlay() : close()
 
     MediaPlayer {
         id: player
@@ -190,7 +192,7 @@ Rectangle {
                 color: FiliTheme.muted
             }
             IconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current.m; ql.close(); win.forwardMessage(m); } }
-            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isYoutube; onClicked: ql.openWithApp() }
+            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isPage; onClicked: ql.openWithApp() }
             IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: ql.close() }
         }
     }
@@ -229,7 +231,7 @@ Rectangle {
         // Voice message / audio / document: a card
         Column {
             anchors.centerIn: parent
-            visible: (ql.isAudio || (!ql.isPicture && !ql.isVideo && !ql.isYoutube)) && ql.current !== null
+            visible: (ql.isAudio || (!ql.isPicture && !ql.isVideo && !ql.isPage)) && ql.current !== null
             spacing: FiliTheme.space2
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -259,40 +261,13 @@ Rectangle {
                 onClicked: ql.openWithApp()
             }
         }
-        // YouTube link: thumbnail and title; Space or the button plays it in mpv (a web player would need a browser engine)
-        Column {
-            anchors.centerIn: parent
-            visible: ql.isYoutube
-            spacing: FiliTheme.space3
-            Image {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.min(stage.width - 32, 640)
-                height: width * 9 / 16
-                source: ql.isYoutube ? "https://i.ytimg.com/vi/" + ql.current.vid + "/hqdefault.jpg" : ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 64
-                    height: 64
-                    radius: 32
-                    color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
-                    Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 26; color: FiliTheme.text }
-                }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ql.playLink() }
-            }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.min(stage.width - 32, 640)
-                horizontalAlignment: Text.AlignHCenter
-                text: ql.isYoutube ? (ql.titles[ql.current.vid] || "") : ""
-                wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                font.family: FiliTheme.font
-                font.pixelSize: FiliTheme.size
-                color: FiliTheme.text
-            }
-            TextButton { anchors.horizontalCenter: parent.horizontalCenter; label: Conversations.tr("Play"); primary: true; onClicked: ql.playLink() }
+        // A video page (YouTube, Instagram, TikTok…): played here, full size, once its stream is found
+        VideoLink {
+            anchors.fill: parent
+            visible: ql.isPage
+            url: ql.isPage ? ql.current.url : ""
+            poster: ql.isYoutube ? "https://i.ytimg.com/vi/" + ql.current.vid + "/hqdefault.jpg" : ""
+            autoplay: ql.visible
         }
         // Waiting / failure
         Text {

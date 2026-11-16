@@ -601,6 +601,8 @@ async fn fetch_file(daemon: &Arc<Daemon>, params: &Map<String, Value>) -> Result
     args.insert("message".into(), json!(native));
     args.insert("ref".into(), media.get("ref").cloned().unwrap_or(json!(native)));
     args.insert("dest".into(), json!(dest.display().to_string()));
+    // Only when the user asked for the file: the phone is then asked to upload it again if the server dropped it
+    args.insert("retry".into(), json!(bool_param(params, "retry")));
     conn.command("fetch_media", args, Duration::from_secs(300)).await?;
     Ok(json!({"path": dest.display().to_string()}))
 }

@@ -19,6 +19,7 @@ import (
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waMmsRetry"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -38,6 +39,7 @@ type Connector struct {
 	container *sqlstore.Container
 	local     *Local
 	streams   streamer
+	retries   sync.Map // message id -> chan *events.MediaRetry, while a media retry waits for the phone
 
 	// Users already announced to the daemon with their phone number (and push name), so unknown numbers get a title.
 	announced sync.Map
@@ -193,6 +195,13 @@ func (c *Connector) handle(raw any) {
 			"chat": c.canon(evt.Chat).String(), "sender": c.canon(evt.Sender).String(),
 			"active": evt.State == types.ChatPresenceComposing,
 		})
+	case *events.MediaRetry:
+		if ch, ok := c.retries.Load(evt.MessageID); ok {
+			select {
+			case ch.(chan *events.MediaRetry) <- evt:
+			default:
+			}
+		}
 	case *events.HistorySync:
 		c.history(evt)
 	case *events.PushName:
@@ -728,6 +737,66 @@ func (c *Connector) avatar(ctx context.Context, cli *whatsmeow.Client, chat type
 	return nil, nil
 }
 
+// gone: the server no longer has the file (it keeps them a few weeks).
+func gone(err error) bool {
+	return errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith403) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410)
+}
+
+// retryMedia asks the phone to upload a file again (a media retry receipt), waits for its answer and points `part`
+// at the new location.
+func (c *Connector) retryMedia(ctx context.Context, cli *whatsmeow.Client, chat types.JID, id string, part whatsmeow.DownloadableMessage) error {
+	k, ok := c.local.Known(ctx, chat.String(), id)
+	if !ok {
+		return fail("expired", "the file is no longer on WhatsApp's servers")
+	}
+	rawChat, err := types.ParseJID(k.RawChat)
+	if err != nil {
+		rawChat = chat
+	}
+	info := &types.MessageInfo{ID: id, MessageSource: types.MessageSource{Chat: rawChat, IsFromMe: k.FromMe, IsGroup: rawChat.Server == types.GroupServer}}
+	if sender, err := types.ParseJID(k.RawSender); err == nil {
+		info.Sender = sender
+	}
+	wait := make(chan *events.MediaRetry, 1)
+	c.retries.Store(id, wait)
+	defer c.retries.Delete(id)
+	if err := cli.SendMediaRetryReceipt(ctx, info, part.GetMediaKey()); err != nil {
+		return sendError(err)
+	}
+	select {
+	case evt := <-wait:
+		note, err := whatsmeow.DecryptMediaRetryNotification(evt, part.GetMediaKey())
+		if err != nil {
+			return fail("expired", "the phone no longer has the file")
+		}
+		if note.GetResult() != waMmsRetry.MediaRetryNotification_SUCCESS || note.GetDirectPath() == "" {
+			return fail("expired", "the phone could not send the file again")
+		}
+		retarget(part, note.GetDirectPath())
+		return nil
+	case <-time.After(60 * time.Second):
+		return fail("expired", "the phone did not answer (is it on and online?)")
+	case <-ctx.Done():
+		return fail("failed", "cancelled")
+	}
+}
+
+// retarget points a media message at a new path on the media servers (its address is dropped so the path is used).
+func retarget(part whatsmeow.DownloadableMessage, directPath string) {
+	switch m := part.(type) {
+	case *waE2E.ImageMessage:
+		m.DirectPath, m.URL = &directPath, nil
+	case *waE2E.VideoMessage:
+		m.DirectPath, m.URL = &directPath, nil
+	case *waE2E.AudioMessage:
+		m.DirectPath, m.URL = &directPath, nil
+	case *waE2E.DocumentMessage:
+		m.DirectPath, m.URL = &directPath, nil
+	case *waE2E.StickerMessage:
+		m.DirectPath, m.URL = &directPath, nil
+	}
+}
+
 func (c *Connector) fetchMedia(ctx context.Context, cli *whatsmeow.Client, chat types.JID, cmd *Command) (any, error) {
 	if cmd.Dest == "" {
 		return nil, fail("invalid", "missing dest")
@@ -758,9 +827,16 @@ func (c *Connector) fetchMedia(ctx context.Context, cli *whatsmeow.Client, chat 
 	dl, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	data, err := cli.Download(dl, part)
+	if gone(err) && cmd.Retry {
+		// The file left WhatsApp's servers: the phone is asked to upload it again
+		if rerr := c.retryMedia(dl, cli, chat, ref, part); rerr != nil {
+			return nil, rerr
+		}
+		data, err = cli.Download(dl, part)
+	}
 	if err != nil {
-		if errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410) {
-			return nil, fail("not_found", "the file is no longer on WhatsApp's servers")
+		if gone(err) {
+			return nil, fail("expired", "the file is no longer on WhatsApp's servers")
 		}
 		return nil, fail("failed", "download failed: %v", err)
 	}
