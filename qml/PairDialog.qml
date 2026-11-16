@@ -59,7 +59,8 @@ Rectangle {
             Text {
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: dialog.platform === "gmessages" ? Conversations.tr("On your phone, open Messages, tap your profile picture, then Device pairing > QR code scanner, and scan this code.")
+                text: dialog.kind === "wait" ? Conversations.tr("Contacting %1…").replace("%1", dialog.platformLabel)
+                    : dialog.platform === "gmessages" ? Conversations.tr("On your phone, open Messages, tap your profile picture, then Device pairing > QR code scanner, and scan this code.")
                     : dialog.kind === "qr" ? Conversations.tr("On your phone, open WhatsApp, then Settings > Linked devices > Link a device, and scan this code.")
                                            : Conversations.tr("On your phone, open WhatsApp, then Settings > Linked devices > Link with phone number, and type this code.")
                 font.family: FiliTheme.font
@@ -91,7 +92,7 @@ Rectangle {
                 }
             }
             Text {
-                visible: dialog.kind !== "qr"
+                visible: dialog.kind === "code"
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 text: dialog.code

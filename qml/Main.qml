@@ -181,7 +181,12 @@ ApplicationWindow {
             ctxMenu.openAt(x, y, ps.map(p => ({ id: p, label: platformName(p) })));
         });
     }
-    function linkAccount(platform) { rpc("account.add", { platform: platform }, a => rpc("account.pair", { account: a.key })); }
+    // The pairing dialog opens at once (waiting for the code), then shows what the daemon sends
+    function startPairing(key) {
+        pairDialog.show({ account: key, kind: "wait", data: "" });
+        rpc("account.pair", { account: key }, null, e => { pairDialog.hide(); notice = (e && e.message) || Conversations.tr("The request failed"); });
+    }
+    function linkAccount(platform) { rpc("account.add", { platform: platform }, a => startPairing(a.key)); }
     function openInboxMenu(x, y) {
         menuKind = "inbox"; menuTarget = null;
         ctxMenu.openAt(x, y, [{ id: "read", label: Conversations.tr("Mark All as Read") }]);
@@ -202,7 +207,7 @@ ApplicationWindow {
             if (id.startsWith("st:")) rpc("presence.set", { account: t.key, state: id.slice(3) });
             else if (id === "only") filter = "account:" + t.key;
             else if (id === "read") markAllRead(chats.filter(c => c.account === t.key));
-            else if (id === "pair") rpc("account.pair", { account: t.key });
+            else if (id === "pair") startPairing(t.key);
             else if (id === "reconnect") rpc("account.reconnect", { account: t.key });
             else if (id === "remove") {
                 // Second step: removing unlinks the device and deletes the local history, so ask once

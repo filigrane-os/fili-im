@@ -42,7 +42,8 @@ type Connector struct {
 	client   *libgm.Client
 	auth     *libgm.AuthData
 	pairing  context.CancelFunc // set while a QR pairing runs
-	syncedAt string             // session id of the last sync
+	lastQR   string
+	syncedAt string // session id of the last sync
 	syncing  bool
 
 	convs    sync.Map // conversation id -> *gmproto.Conversation
@@ -742,7 +743,11 @@ func (c *Connector) fetchMedia(ctx context.Context, cli *libgm.Client, cmd *Comm
 func (c *Connector) pair() error {
 	c.mu.Lock()
 	if c.pairing != nil {
+		qr := c.lastQR
 		c.mu.Unlock()
+		if qr != "" {
+			c.out.Event("pairing", map[string]any{"kind": "qr", "data": qr, "expires_s": int(qrLifetime.Seconds())})
+		}
 		return nil
 	}
 	if c.client != nil {
@@ -770,7 +775,7 @@ func (c *Connector) pair() error {
 		c.mu.Unlock()
 		return fail("failed", "cannot start the pairing: %v", err)
 	}
-	c.out.Event("pairing", map[string]any{"kind": "qr", "data": qr, "expires_s": int(qrLifetime.Seconds())})
+	c.setQR(qr)
 	go func() {
 		for tries := 0; tries < 10; tries++ {
 			select {
@@ -783,7 +788,7 @@ func (c *Connector) pair() error {
 				c.log.Warn().Err(err).Msg("QR refresh failed")
 				break
 			}
-			c.out.Event("pairing", map[string]any{"kind": "qr", "data": next, "expires_s": int(qrLifetime.Seconds())})
+			c.setQR(next)
 		}
 		select {
 		case <-ctx.Done():
@@ -807,4 +812,11 @@ func (c *Connector) logout(ctx context.Context) error {
 	}
 	c.forget("")
 	return nil
+}
+
+func (c *Connector) setQR(qr string) {
+	c.mu.Lock()
+	c.lastQR = qr
+	c.mu.Unlock()
+	c.out.Event("pairing", map[string]any{"kind": "qr", "data": qr, "expires_s": int(qrLifetime.Seconds())})
 }
