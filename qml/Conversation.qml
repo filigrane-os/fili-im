@@ -117,13 +117,16 @@ Rectangle {
         }, done));
     }
     function apply(m) {
-        const atEnd = list_.atYEnd || (m.from_me && !messages.some(x => x.id === m.id));
+        // At the bottom, or close to it (a preview or picture may still be growing under the last message), or the
+        // user's own new message: the view goes to the very end
+        const nearEnd = list_.atYEnd || list_.contentHeight - (list_.contentY + list_.height - list_.bottomMargin) < 160;
+        const atEnd = nearEnd || (m.from_me && !messages.some(x => x.id === m.id));
         const i = messages.findIndex(x => x.id === m.id);
         const copy = messages.slice();
         if (i >= 0) copy[i] = m; else copy.push(m);
         if (i < 0) sortMessages(copy);
         messages = copy;
-        if (atEnd) list_.positionViewAtEnd();
+        if (atEnd) toLatest();
         else if (!m.from_me && i < 0) unseen++;
         if (!m.from_me && i < 0 && win.active) win.rpc("mark_read", { chat: m.chat, receipt: "auto" });
     }
