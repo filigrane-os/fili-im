@@ -154,58 +154,26 @@ Rectangle {
     Rectangle {
         id: head
         visible: win.current !== 0 && view.person !== null
-        // Who it is, then (a person on several platforms, no account chosen) one tab per platform
+        // One row: with several platforms (no account chosen) the tabs fill its whole height on the left, and who it is
+        // (picture, name, platform) is on the right; otherwise who it is takes the left
         readonly property bool tabs: win.grouped && !win.accountFocus
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: visible ? (tabs ? 48 + 32 : 48) : 0
+        height: visible ? 48 : 0
         color: FiliTheme.background
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
-        Avatar {
-            id: headAvatar
-            anchors { left: parent.left; leftMargin: FiliTheme.margin; top: parent.top; topMargin: 7 }
-            size: 34
-            chatId: view.person ? view.person.id : 0
-            title: view.person ? view.person.title : ""
-            alts: win.groupIds(win.current).filter(x => x !== win.current)
-        }
-        Column {
-            anchors { left: headAvatar.right; leftMargin: FiliTheme.space3; right: parent.right; rightMargin: FiliTheme.margin; top: parent.top; topMargin: 7 }
-            height: 34
-            Item { width: 1; height: head.tabs || !win.multi ? 4 : 0 }
-            Text {
-                width: parent.width
-                text: view.person ? view.person.title : ""
-                elide: Text.ElideRight
-                textFormat: Text.PlainText
-                font.family: FiliTheme.font
-                font.pixelSize: FiliTheme.size + 1
-                font.weight: FiliTheme.weightAccent
-                color: FiliTheme.text
-            }
-            Text {
-                visible: win.multi && !head.tabs
-                width: parent.width
-                text: view.chat ? win.platformName(win.platformOf(view.chat)) : ""
-                elide: Text.ElideRight
-                font.family: FiliTheme.font
-                font.pixelSize: FiliTheme.sizeSmall
-                color: FiliTheme.muted
-            }
-        }
-        MouseArea { z: -1; anchors { left: parent.left; right: parent.right; top: parent.top } height: 48; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
-        // The platforms, as tabs on the bottom edge: All conversations first
+
+        // The platforms, as tabs the height of the picture and its margins: All conversations first
         Row {
             id: platformTabs
             visible: head.tabs
-            anchors { left: parent.left; leftMargin: FiliTheme.margin - FiliTheme.space2; bottom: parent.bottom }
-            height: 32
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
             Repeater {
                 model: head.tabs ? [0].concat(win.group.map(c => c.id)) : []
                 Rectangle {
                     required property int modelData
                     readonly property var chatOf: modelData === 0 ? null : win.chatById(modelData)
                     readonly property bool on: win.scope === modelData
-                    height: parent.height
+                    height: platformTabs.height
                     width: tabRow.width + 2 * FiliTheme.space4
                     color: on ? FiliTheme.surface : tabArea.containsMouse ? FiliTheme.alpha(FiliTheme.surfaceHover, 0.6) : "transparent"
                     // The selected tab sits on the bottom line with an accent bar
@@ -231,6 +199,54 @@ Rectangle {
                         }
                     }
                     MouseArea { id: tabArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.setScope(modelData) }
+                }
+            }
+        }
+
+        // Who it is: a click opens the contact card
+        Item {
+            id: identity
+            anchors { left: head.tabs ? platformTabs.right : parent.left; right: parent.right; top: parent.top; bottom: parent.bottom }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (view.person) win.showContact(view.person) }
+            TextMetrics { id: titleMetrics; text: view.person ? view.person.title : ""; font.family: FiliTheme.font; font.pixelSize: FiliTheme.size + 1; font.weight: FiliTheme.weightAccent }
+            Row {
+                id: who
+                spacing: FiliTheme.space3
+                anchors.verticalCenter: parent.verticalCenter
+                // On the right when there are tabs, else on the left
+                x: head.tabs ? Math.max(FiliTheme.margin, parent.width - width - FiliTheme.margin) : FiliTheme.margin
+                layoutDirection: head.tabs ? Qt.RightToLeft : Qt.LeftToRight
+                Avatar {
+                    id: headAvatar
+                    size: 34
+                    chatId: view.person ? view.person.id : 0
+                    title: view.person ? view.person.title : ""
+                    alts: win.groupIds(win.current).filter(x => x !== win.current)
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(60, Math.min(titleMetrics.width + 2, identity.width - 34 - 3 * FiliTheme.margin))
+                    Text {
+                        id: titleText
+                        width: parent.width
+                        horizontalAlignment: head.tabs ? Text.AlignRight : Text.AlignLeft
+                        text: view.person ? view.person.title : ""
+                        elide: Text.ElideRight
+                        textFormat: Text.PlainText
+                        font.family: FiliTheme.font
+                        font.pixelSize: FiliTheme.size + 1
+                        font.weight: FiliTheme.weightAccent
+                        color: FiliTheme.text
+                    }
+                    Text {
+                        visible: win.multi && !head.tabs
+                        width: parent.width
+                        text: view.chat ? win.platformName(win.platformOf(view.chat)) : ""
+                        elide: Text.ElideRight
+                        font.family: FiliTheme.font
+                        font.pixelSize: FiliTheme.sizeSmall
+                        color: FiliTheme.muted
+                    }
                 }
             }
         }
