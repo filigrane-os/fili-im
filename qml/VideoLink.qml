@@ -13,13 +13,18 @@ Item {
     property string phase: "idle"      // idle | resolving | ready | error
     property string error: ""
     property int rid: 0
-    signal expand()
+    // Where it starts (ms): Quick Look continues where the bubble stopped
+    property int startAt: 0
+    property bool resumed: false
+    readonly property int position: player.position
+    signal expand(int position)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
 
     function start() {
         if (phase === "resolving") return;
         phase = "resolving";
         error = "";
+        resumed = false;
         rid = Conversations.resolveVideo(url);
     }
     function toggle() {
@@ -47,6 +52,7 @@ Item {
         videoOutput: out
         audioOutput: AudioOutput { }
         onErrorOccurred: (e, text) => { v.phase = "error"; v.error = text; }
+        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && v.startAt > 0 && !v.resumed) { v.resumed = true; player.position = v.startAt; }
     }
 
     Rectangle { anchors.fill: parent; color: "black"; radius: v.compact ? FiliTheme.radiusControl : 0 }
@@ -69,15 +75,11 @@ Item {
         color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.65)
         Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: parent.width * 0.4; color: FiliTheme.text }
     }
-    Text {
-        visible: v.phase === "resolving"
+    // Looking the stream up, or the player waiting for data: an endless spinner
+    Spinner {
         anchors.centerIn: parent
-        text: Conversations.tr("Loading the video…")
-        font.family: FiliTheme.font
-        font.pixelSize: FiliTheme.sizeList
-        color: "white"
-        style: Text.Outline
-        styleColor: "black"
+        size: v.compact ? 32 : 44
+        visible: v.phase === "resolving" || (v.phase === "ready" && (player.mediaStatus === MediaPlayer.LoadingMedia || player.mediaStatus === MediaPlayer.StalledMedia || player.mediaStatus === MediaPlayer.BufferingMedia))
     }
     Column {
         visible: v.phase === "error"
@@ -134,6 +136,6 @@ Item {
         anchors { top: parent.top; right: parent.right; margins: FiliTheme.space1 }
         name: "maximize"
         tip: Conversations.tr("Open in Quick Look")
-        onClicked: { player.pause(); v.expand(); }
+        onClicked: { const at = player.position; player.pause(); v.expand(at); }
     }
 }

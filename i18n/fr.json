@@ -352,5 +352,6 @@
  "Loading the video…": "Chargement de la vidéo…",
  "This video cannot be played here": "Cette vidéo ne peut pas être lue ici",
  "Play in mpv": "Lire dans mpv",
- "Open in Quick Look": "Ouvrir dans le Quick Look"
+ "Open in Quick Look": "Ouvrir dans le Quick Look",
+ "Open the message under the pointer in Quick Look (picture, video, video link)": "Ouvrir dans le Quick Look le message sous le pointeur (image, vidéo, lien vidéo)"
 }

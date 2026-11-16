@@ -129,6 +129,13 @@ Rectangle {
     }
     function byNative(id) { return messages.find(m => m.native_id === id) || null; }
     function focusComposer() { composer.focusInput(); }
+    // The message under the pointer: Space opens it in Quick Look when it has a picture, a video or a video link
+    property int hoverId: 0
+    readonly property var hoverMessage: hoverId ? (messages.find(m => m.id === hoverId) || null) : null
+    readonly property bool hoverQuickLookable: hoverMessage !== null && !hoverMessage.deleted && !!(hoverMessage.media || quickLookCard.linkItem(hoverMessage))
+    function quickLookHovered() { if (hoverQuickLookable) win.quickLook(hoverMessage.id); }
+    // Outside the text field (typing a space must stay possible), and in the field while it is still empty
+    Shortcut { sequence: "Space"; enabled: view.hoverQuickLookable && !composer.typing && !win.overlayOpen; onActivated: view.quickLookHovered() }
     // Quick Look on the latest picture, video or video link of the conversation
     function quickLookLast() {
         for (let i = messages.length - 1; i >= 0; i--)
@@ -363,7 +370,7 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: win.platformName(win.platformOf(win.chatById(item.modelData.chat))).charAt(0); font.pixelSize: 11; font.bold: true; color: "white" }
             }
             // Actions shown while the pointer is over the message, on its bubble
-            HoverHandler { id: hover }
+            HoverHandler { id: hover; onHoveredChanged: { if (hovered) view.hoverId = item.modelData.id; else if (view.hoverId === item.modelData.id) view.hoverId = 0; } }
             Rectangle {
                 id: tools
                 readonly property var m: item.modelData
@@ -466,6 +473,8 @@ Rectangle {
         caps: view.caps
         onPlatformMenu: (x, y) => { const p = composer.mapToItem(view, x, y); menu.message = null; menu.openAt(p.x, p.y - 10 - win.group.length * 26, win.group.map(c => ({ id: "target:" + c.id, label: (c.id === win.targetChat.id ? "● " : "○ ") + win.platformName(win.platformOf(c)) }))); }
         onSent: view.toLatest()
+        quickLookReady: view.hoverQuickLookable
+        onQuickLook: view.quickLookHovered()
         lastMine: { for (let i = view.messages.length - 1; i >= 0; i--) if (view.messages[i].from_me && !view.messages[i].deleted && view.messages[i].kind === "text") return view.messages[i]; return null; }
     }
 

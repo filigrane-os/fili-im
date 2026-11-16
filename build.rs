@@ -36,6 +36,7 @@ fn main() {
                 "qml/QuickLook.qml",
                 "qml/Avatar.qml",
                 "qml/VideoLink.qml",
+                "qml/Spinner.qml",
                 "qml/SearchField.qml",
                 "qml/ContactCard.qml",
                 "qml/Icon.qml",

@@ -215,10 +215,11 @@ Rectangle {
                 color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
                 Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
             }
+            Spinner { anchors.centerIn: parent; size: 28; visible: b.fetching && picture.shown.status !== Image.Ready }
             Text {
                 anchors.centerIn: parent
-                visible: picture.shown.status !== Image.Ready
-                text: b.fetching ? Conversations.tr("Downloading…") : (b.mediaPath === "" ? (b.expired ? Conversations.tr("No longer on the server: click to ask the phone") : "▣") : "")
+                visible: picture.shown.status !== Image.Ready && !b.fetching
+                text: b.mediaPath === "" ? (b.expired ? Conversations.tr("No longer on the server: click to ask the phone") : "▣") : ""
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
@@ -288,7 +289,7 @@ Rectangle {
                 url: b.card ? b.linkUrl : ""
                 poster: b.card ? "https://i.ytimg.com/vi/" + b.ytId + "/mqdefault.jpg" : ""
                 compact: true
-                onExpand: win.quickLook(b.message.id)
+                onExpand: at => win.quickLook(b.message.id, at)
             }
             Text {
                 id: titleText
@@ -301,7 +302,15 @@ Rectangle {
                 textFormat: Text.PlainText
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
-                color: FiliTheme.text
+                color: ytLink.containsMouse ? FiliTheme.accentColor : FiliTheme.text
+            }
+            // Title and source open the page in the default browser
+            MouseArea {
+                id: ytLink
+                anchors { left: parent.left; right: parent.right; top: ytThumb.bottom; bottom: parent.bottom }
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Conversations.openUrl(b.linkUrl)
             }
         }
         Text {
@@ -332,7 +341,7 @@ Rectangle {
                     url: b.siteVideo ? b.linkUrl : ""
                     poster: b.og.image || ""
                     compact: true
-                    onExpand: win.quickLook(b.message.id)
+                    onExpand: at => win.quickLook(b.message.id, at)
                 }
                 Image {
                     visible: !b.siteVideo && b.og.image !== undefined && status !== Image.Error
@@ -373,7 +382,7 @@ Rectangle {
                             font.family: FiliTheme.font
                             font.pixelSize: FiliTheme.size
                             font.weight: FiliTheme.weightAccent
-                            color: FiliTheme.text
+                            color: ogLink.containsMouse ? FiliTheme.accentColor : FiliTheme.text
                         }
                         Text {
                             visible: b.og.description !== undefined
@@ -390,7 +399,7 @@ Rectangle {
                     }
                 }
             }
-            MouseArea { anchors.fill: parent; z: -1; cursorShape: Qt.PointingHandCursor; onClicked: Conversations.openUrl(b.linkUrl) }
+            MouseArea { id: ogLink; anchors.fill: parent; z: -1; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Conversations.openUrl(b.linkUrl) }
         }
         Rectangle {
             visible: b.videoLink
@@ -404,6 +413,8 @@ Rectangle {
         TextEdit {
             visible: b.body !== "" && !((b.card || b.ogShown) && b.body.trim() === b.linkUrl)
             width: parent.width
+            // The text sits apart from the preview above it
+            topPadding: b.card || b.ogShown || b.videoLink || b.hasMedia ? FiliTheme.space2 : 0
             text: b.body
             readOnly: true
             selectByMouse: true

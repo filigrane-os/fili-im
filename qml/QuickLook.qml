@@ -42,7 +42,9 @@ Rectangle {
         if (/^https?:\/\/(www\.)?(instagram\.com\/(reel|reels|p|tv)\/|tiktok\.com\/|vimeo\.com\/\d|dailymotion\.com\/video|(x|twitter)\.com\/[^\/]+\/status|facebook\.com\/(watch|reel)|fb\.watch|clips\.twitch\.tv|twitch\.tv\/[^\/]+\/clip)/i.test(url)) return { id: m.id, m: m, kind: "sitevideo", url: url };
         return null;
     }
-    function open(messages, id) {
+    property int startAt: 0   // where a video page continues from (ms), when opened from a playing bubble
+    function open(messages, id, at) {
+        startAt = at || 0;
         const list = [];
         for (const m of messages) {
             if (m.deleted) continue;
@@ -268,12 +270,18 @@ Rectangle {
             url: ql.isPage ? ql.current.url : ""
             poster: ql.isYoutube ? "https://i.ytimg.com/vi/" + ql.current.vid + "/hqdefault.jpg" : ""
             autoplay: ql.visible
+            startAt: ql.startAt
         }
         // Waiting / failure
+        Spinner {
+            anchors.centerIn: parent
+            size: 44
+            visible: ql.current !== null && ql.path === "" && (ql.isPicture || ql.isVideo) && ql.playerError === "" && !ql.failed[ql.current.id]
+        }
         Text {
             anchors.centerIn: parent
-            visible: ql.current !== null && ((ql.path === "" && (ql.isPicture || ql.isVideo)) || ql.playerError !== "")
-            text: ql.playerError !== "" ? ql.playerError : ql.current && ql.failed[ql.current.id] ? ql.failed[ql.current.id] : Conversations.tr("Downloading…")
+            visible: ql.current !== null && ((ql.path === "" && (ql.isPicture || ql.isVideo) && !!ql.failed[ql.current.id]) || ql.playerError !== "")
+            text: ql.playerError !== "" ? ql.playerError : ql.current && ql.failed[ql.current.id] ? ql.failed[ql.current.id] : ""
             font.family: FiliTheme.font
             font.pixelSize: FiliTheme.sizeList
             color: FiliTheme.muted

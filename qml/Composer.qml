@@ -12,6 +12,10 @@ Rectangle {
     property var lastMine: null
     signal platformMenu(real x, real y)
     signal sent()
+    readonly property bool typing: input.activeFocus
+    // Set by the conversation: the message under the pointer can be opened in Quick Look with Space
+    property bool quickLookReady: false
+    signal quickLook()
     // In the view of all the conversations of a person: which platform the message goes to
     readonly property bool choosing: win.grouped && win.scope === 0
     property var editing: null
@@ -255,6 +259,7 @@ Rectangle {
                 const pasted = JSON.parse(Conversations.clipboardFiles());
                 if (pasted.length > 0) { c.addFiles(pasted); e.accepted = true; return; }
             }
+            if (e.key === Qt.Key_Space && text === "" && e.modifiers === Qt.NoModifier && c.quickLookReady) { c.quickLook(); e.accepted = true; return; }
             if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
             else if (e.key === Qt.Key_Escape) { c.cancel(); e.accepted = true; }
             else if (e.key === Qt.Key_Up && text === "" && c.lastMine && c.caps && c.caps.edit) { c.startEdit(c.lastMine); e.accepted = true; }

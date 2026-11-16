@@ -14,6 +14,7 @@ Rectangle {
             ["Ctrl+K  Ctrl+N", Conversations.tr("Go to a conversation")],
             ["Alt+↓  Alt+↑", Conversations.tr("Next / previous conversation")],
             ["Ctrl+Tab  Ctrl+Shift+Tab", Conversations.tr("Next / previous tab")],
+            ["Space", Conversations.tr("Open the message under the pointer in Quick Look (picture, video, video link)")],
             ["Ctrl+F", Conversations.tr("Find in the conversation (all the platforms of a person in the first view)")],
             ["Ctrl+Shift+F", Conversations.tr("Search every message (Esc clears)")],
             ["Ctrl+U", Conversations.tr("Unread conversations only")],
