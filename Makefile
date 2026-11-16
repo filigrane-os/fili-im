@@ -13,23 +13,29 @@ release: connectors-release
 connectors:
 	mkdir -p target/debug
 	cd connectors/whatsapp && $(GO_BUILD) -o ../../target/debug/fili-im-whatsapp .
+	cd connectors/gmessages && $(GO_BUILD) -o ../../target/debug/fili-im-gmessages .
 
 connectors-release:
 	mkdir -p target/release
 	cd connectors/whatsapp && $(GO_BUILD) -o ../../target/release/fili-im-whatsapp .
+	cd connectors/gmessages && $(GO_BUILD) -o ../../target/release/fili-im-gmessages .
 
 test:
 	cargo test
 	cd connectors/whatsapp && go test ./...
+	cd connectors/gmessages && go test ./...
 
 fmt:
 	cargo fmt
 	cd connectors/whatsapp && gofmt -w .
+	cd connectors/gmessages && gofmt -w .
 
 check: build
 	cargo fmt --check
 	cargo clippy --all-targets -- -D warnings
 	test -z "$$(cd connectors/whatsapp && gofmt -l .)"
 	cd connectors/whatsapp && go vet ./... && go test ./...
+	test -z "$$(cd connectors/gmessages && gofmt -l .)"
+	cd connectors/gmessages && go vet ./... && go test ./...
 	cargo test
 	FILI_IM_CONNECTOR=$(CURDIR)/target/debug/fili-im-whatsapp cargo test --test conformance

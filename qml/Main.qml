@@ -146,6 +146,7 @@ ApplicationWindow {
     // ---- Context menus (right click): a conversation of the list, an account or the inbox of the sidebar ------------
     property string menuKind: ""
     property var menuTarget: null
+    property point menuPos: Qt.point(0, 0)
     function openChatMenu(row, x, y) {
         const members = groupIds(row.id).map(chatById).filter(c => c);
         const unread = members.reduce((n, c) => n + (c.unread > 0 ? c.unread : 0), 0);
@@ -167,9 +168,20 @@ ApplicationWindow {
         if (chats.some(c => c.account === a.key && c.unread > 0)) entries.push({ id: "read", label: Conversations.tr("Mark All as Read") });
         if (a.state === "needs_pairing" || a.state === "logged_out") entries.push({ id: "pair", label: Conversations.tr("Link Account…") });
         else if (cur !== "offline") entries.push({ id: "reconnect", label: Conversations.tr("Reconnect") });
-        menuKind = "account"; menuTarget = a;
+        entries.push({ id: "remove", label: Conversations.tr("Remove Account…") });
+        menuKind = "account"; menuTarget = a; menuPos = Qt.point(x, y);
         ctxMenu.openAt(x, y, entries);
     }
+    // Add Account: the installed connectors (a single one is added at once)
+    function addAccount(x, y) {
+        rpc("platforms.list", {}, list => {
+            const ps = list.map(p => p.platform).filter(p => p !== "fake");
+            if (ps.length === 1) return linkAccount(ps[0]);
+            menuKind = "add"; menuTarget = null;
+            ctxMenu.openAt(x, y, ps.map(p => ({ id: p, label: platformName(p) })));
+        });
+    }
+    function linkAccount(platform) { rpc("account.add", { platform: platform }, a => rpc("account.pair", { account: a.key })); }
     function openInboxMenu(x, y) {
         menuKind = "inbox"; menuTarget = null;
         ctxMenu.openAt(x, y, [{ id: "read", label: Conversations.tr("Mark All as Read") }]);
@@ -192,6 +204,17 @@ ApplicationWindow {
             else if (id === "read") markAllRead(chats.filter(c => c.account === t.key));
             else if (id === "pair") rpc("account.pair", { account: t.key });
             else if (id === "reconnect") rpc("account.reconnect", { account: t.key });
+            else if (id === "remove") {
+                // Second step: removing unlinks the device and deletes the local history, so ask once
+                const pos = menuPos;
+                Qt.callLater(() => { menuKind = "remove"; menuTarget = t; ctxMenu.openAt(pos.x, pos.y, [
+                    { id: "confirm", label: Conversations.tr("Remove and Delete Its Messages"), danger: true },
+                    { id: "cancel", label: Conversations.tr("Cancel") }]); });
+            }
+        } else if (menuKind === "add") {
+            linkAccount(id);
+        } else if (menuKind === "remove") {
+            if (id === "confirm") rpc("account.remove", { account: t.key }, () => { if (filter === "account:" + t.key) filter = "all"; });
         } else if (menuKind === "inbox") {
             if (id === "read") markAllRead(chats);
         }
@@ -207,8 +230,8 @@ ApplicationWindow {
     // Several platforms: a conversation says which one it is on, and the same person on another one is offered
     readonly property bool multi: { const p = {}; accounts.forEach(a => { p[a.platform] = true; }); return Object.keys(p).length > 1; }
     function platformOf(c) { const a = c ? accountByKey(c.account) : null; return a ? a.platform : ""; }
-    function platformName(p) { return ({ whatsapp: "WhatsApp", telegram: "Telegram" })[p] || p; }
-    function platformColor(p) { return ({ whatsapp: "#2fa84f", telegram: "#2a8fd6" })[p] || FiliTheme.muted; }
+    function platformName(p) { return ({ whatsapp: "WhatsApp", gmessages: "Google Messages", telegram: "Telegram" })[p] || p; }
+    function platformColor(p) { return ({ whatsapp: "#2fa84f", gmessages: "#1a73e8", telegram: "#2a8fd6" })[p] || FiliTheme.muted; }
     function siblings(c) {
         if (!c || c.kind !== "direct") return [];
         const n = c.title.trim().toLowerCase();
@@ -275,6 +298,7 @@ ApplicationWindow {
             accounts = upsert(accounts, e.account, "key");
         } else if (e.event === "account.removed") {
             accounts = accounts.filter(a => a.key !== e.account);
+            chats = chats.filter(c => c.account !== e.account);
         } else if (e.event === "pairing") {
             pairDialog.show(e);
         } else if (e.event === "history") {
@@ -361,7 +385,7 @@ ApplicationWindow {
             else if (name === "quick-look") conversation.quickLookLast();
             else if (name === "record-voice") conversation.toggleRecording();
             else if (name === "contact-info") { const c = chatById(current); if (c) showContact(c); }
-            else if (name === "add-account") win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }));
+            else if (name === "add-account") addAccount(win.width / 2 - 80, win.height / 3);
             else if (name === "pair") sidebar.pairFirst();
             else if (name === "new-conversation") switchCard.show();
             else if (name === "shortcuts") shortcutsCard.show();

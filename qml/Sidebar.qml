@@ -179,7 +179,7 @@ Rectangle {
         TextButton {
             anchors { left: parent.left; leftMargin: FiliTheme.margin - FiliTheme.space3; verticalCenter: parent.verticalCenter }
             label: Conversations.tr("Add Account…")
-            onClicked: win.rpc("account.add", { platform: "whatsapp" }, a => win.rpc("account.pair", { account: a.key }))
+            onClicked: { const p = mapToItem(null, 0, 0); win.addAccount(p.x, p.y - 80); }
         }
     }
 }
