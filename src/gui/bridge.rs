@@ -155,6 +155,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "reportProblem"]
         fn report_problem(self: &Conversations, text: &QString) -> QString;
+        // Restarts the daemon and its connectors (View > Restart Service), for a fresh start when something is stuck
+        #[qinvokable]
+        #[cxx_name = "restartService"]
+        fn restart_service(self: &Conversations);
         #[qinvokable]
         #[cxx_name = "uiState"]
         fn ui_state(self: &Conversations, key: &QString) -> QString;
@@ -488,6 +492,11 @@ impl qobject::Conversations {
         let said = text.to_string();
         let message = if said.trim().is_empty() { "Problem reported from the Debug panel".to_string() } else { said };
         QString::from(&crate::logs::incident("manual", &message, true).unwrap_or_default())
+    }
+
+    pub fn restart_service(&self) {
+        log::info!("restarting the daemon");
+        link::restart();
     }
 
     pub fn ui_state(&self, key: &QString) -> QString {

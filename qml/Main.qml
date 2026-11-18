@@ -277,6 +277,11 @@ ApplicationWindow {
         }
         function onPushed(text) { win.onEvent(JSON.parse(text)); }
     }
+    // A fresh start of the daemon and its connectors; the window reconnects by itself (onOnlineChanged)
+    function restartService() {
+        win.notice = Conversations.tr("Restarting the service…");
+        Conversations.restartService();
+    }
     function reload() {
         rpc("accounts.list", {}, list => { accounts = list; });
         rpc("chats.list", { limit: 500 }, list => { chats = list; });
@@ -373,6 +378,7 @@ ApplicationWindow {
             else if (name === "toggle-header") win.showHeader = !win.showHeader;
             else if (name === "toggle-footer") win.showFooter = !win.showFooter;
             else if (name === "debug") debug.open = !debug.open;
+            else if (name === "restart-service") win.restartService();
             else if (name === "toggle-window-buttons") win.toggleWindowButtons();
             else if (name === "search") { if (win.current) conversation.openFind(); else win.openSearch(); }
             else if (name === "search-all") win.openSearch();

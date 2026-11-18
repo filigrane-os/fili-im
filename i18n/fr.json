@@ -371,5 +371,7 @@
  "Clear": "Effacer",
  "Open file": "Ouvrir le fichier",
  "Rob was asked to look at it": "Rob a été prévenu",
- "Could not record the problem": "Impossible d'enregistrer le problème"
+ "Could not record the problem": "Impossible d'enregistrer le problème",
+ "Restart Service": "Redémarrer le service",
+ "Restarting the service…": "Redémarrage du service…"
 }
