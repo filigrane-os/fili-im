@@ -18,6 +18,10 @@ pub fn run() -> i32 {
         // SAFETY: nothing else runs yet (single thread, before Qt starts)
         unsafe { std::env::set_var("QT_QPA_PLATFORMTHEME", "xdgdesktopportal") };
     }
+    // The log of the window (Debug panel, View > Debug Logs): ~/.local/state/filigrane/logs/fili-im.log; panics and QML
+    // errors become incidents (fili-incident). Nothing of the messages is logged.
+    crate::logs::init("fili-im", "filigrane-os/fili-im", env!("CARGO_PKG_VERSION"), crate::window_parts::incidents_on());
+    crate::logs::capture_qt();
     let mut app = QGuiApplication::new();
     // Wayland app-id (niri rules, fili-im.desktop)
     QGuiApplication::set_desktop_file_name(&QString::from("fili-im"));

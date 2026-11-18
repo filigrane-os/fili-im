@@ -31,7 +31,7 @@ pub async fn accept(daemon: Arc<Daemon>, listener: UnixListener) {
                 tokio::spawn(client(daemon.clone(), stream));
             }
             Err(e) => {
-                eprintln!("fili-im: control socket: {e}");
+                log::warn!("control socket: {e}");
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }
@@ -348,7 +348,7 @@ pub(super) fn mark_read(daemon: &Arc<Daemon>, chat: i64, ask: Ask) -> Result<Val
                     args.insert("sender".into(), json!(sender));
                 }
                 if let Err(e) = conn.command("mark_read", args, Duration::from_secs(30)).await {
-                    eprintln!("fili-im: {}: mark_read: {}", conn.key, e.message);
+                    log::warn!("{}: mark_read: {}", conn.key, e.message);
                 }
             }
         });

@@ -372,6 +372,7 @@ ApplicationWindow {
             else if (name === "window-actions") windowPanel.visible ? windowPanel.close() : windowPanel.open();
             else if (name === "toggle-header") win.showHeader = !win.showHeader;
             else if (name === "toggle-footer") win.showFooter = !win.showFooter;
+            else if (name === "debug") debug.open = !debug.open;
             else if (name === "toggle-window-buttons") win.toggleWindowButtons();
             else if (name === "search") { if (win.current) conversation.openFind(); else win.openSearch(); }
             else if (name === "search-all") win.openSearch();
@@ -410,6 +411,7 @@ ApplicationWindow {
     Shortcut { sequences: ["F1", "Ctrl+/"]; onActivated: shortcutsCard.show() }
     Shortcut { sequences: ["Ctrl+U"]; onActivated: win.filter = win.filter === "unread" ? "all" : "unread" }
     Shortcut { sequences: ["Ctrl+Shift+W"]; onActivated: windowPanel.visible ? windowPanel.close() : windowPanel.open() }
+    Shortcut { sequences: ["Ctrl+Shift+L"]; onActivated: debug.open = !debug.open }
     Shortcut { sequences: ["F5", "Ctrl+R"]; onActivated: win.reload() }
     Shortcut { sequences: ["Ctrl+L"]; onActivated: conversation.focusComposer() }
 
@@ -531,16 +533,16 @@ ApplicationWindow {
     Sidebar {
         id: sidebar
         visible: win.width >= 760
-        anchors { top: toolbar.bottom; bottom: footer.top; left: parent.left }
+        anchors { top: toolbar.bottom; bottom: debug.top; left: parent.left }
         width: visible ? FiliTheme.sidebarWidth : 0
     }
     ChatList {
         id: chatList
-        anchors { top: toolbar.bottom; bottom: footer.top; left: sidebar.right }
+        anchors { top: toolbar.bottom; bottom: debug.top; left: sidebar.right }
         width: Math.max(240, Math.min(320, win.width * 0.3))
     }
     Item {
-        anchors { top: toolbar.bottom; bottom: footer.top; left: chatList.right; right: parent.right }
+        anchors { top: toolbar.bottom; bottom: debug.top; left: chatList.right; right: parent.right }
         TabBar {
             id: tabBar
             anchors { top: parent.top; left: parent.left; right: parent.right }
@@ -549,6 +551,12 @@ ApplicationWindow {
             id: conversation
             anchors { top: tabBar.bottom; bottom: parent.bottom; left: parent.left; right: parent.right }
         }
+    }
+
+    // Debug panel (View > Debug Logs): the log of the window above the footer, or at the bottom when it is hidden
+    DebugPanel {
+        id: debug
+        anchors { bottom: footer.top; left: parent.left; right: parent.right }
     }
 
     // ---- Footer ------------------------------------------------------------------------------------------------

@@ -136,6 +136,31 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "copyText"]
         fn copy_text(self: &Conversations, text: &QString);
+        // Debug panel (src/logs.rs, qml/DebugPanel.qml, shared with the other fili-* applications): the log entries after
+        // number `since` as JSON {"seq": last number, "entries": [[level, text], ...]} (level 0 debug, 1 info, 2 warning,
+        // 3 error), the file of the log, a way to empty the panel, the file opened by its application, "Ask Rob" (records
+        // an incident and asks Rob to look at it: its id, "" on failure), and uiState / setUiState, the names the shared
+        // panel uses for uiGet / uiSet
+        #[qinvokable]
+        fn logs(self: &Conversations, since: i32) -> QString;
+        #[qinvokable]
+        #[cxx_name = "logFile"]
+        fn log_file(self: &Conversations) -> QString;
+        #[qinvokable]
+        #[cxx_name = "clearLogs"]
+        fn clear_logs(self: &Conversations);
+        #[qinvokable]
+        #[cxx_name = "openPath"]
+        fn open_path(self: &Conversations, path: &QString);
+        #[qinvokable]
+        #[cxx_name = "reportProblem"]
+        fn report_problem(self: &Conversations, text: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "uiState"]
+        fn ui_state(self: &Conversations, key: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "setUiState"]
+        fn set_ui_state(self: &Conversations, key: &QString, value: &QString);
     }
 
     impl cxx_qt::Initialize for Conversations {}
@@ -435,6 +460,42 @@ impl qobject::Conversations {
         let text = std::fs::read_to_string(ui_file()).unwrap_or_default();
         let value = text.lines().find_map(|l| l.strip_prefix(&format!("{key}="))).unwrap_or("");
         QString::from(value)
+    }
+
+    pub fn logs(&self, since: i32) -> QString {
+        let (seq, entries) = crate::logs::since(since.max(0) as u64);
+        QString::from(&serde_json::json!({ "seq": seq, "entries": entries }).to_string())
+    }
+
+    pub fn log_file(&self) -> QString {
+        QString::from(&crate::logs::path().display().to_string())
+    }
+
+    pub fn clear_logs(&self) {
+        crate::logs::clear();
+    }
+
+    pub fn open_path(&self, path: &QString) {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(path.to_string())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+    }
+
+    pub fn report_problem(&self, text: &QString) -> QString {
+        let said = text.to_string();
+        let message = if said.trim().is_empty() { "Problem reported from the Debug panel".to_string() } else { said };
+        QString::from(&crate::logs::incident("manual", &message, true).unwrap_or_default())
+    }
+
+    pub fn ui_state(&self, key: &QString) -> QString {
+        self.ui_get(key)
+    }
+
+    pub fn set_ui_state(&self, key: &QString, value: &QString) {
+        self.ui_set(key, value)
     }
 
     pub fn ui_set(&self, key: &QString, value: &QString) {

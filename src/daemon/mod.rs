@@ -76,17 +76,20 @@ pub fn run() -> i32 {
         eprintln!("fili-im: the daemon is already running");
         return 0;
     };
+    // The daemon's log: ~/.local/state/filigrane/logs/fili-im-daemon.log (errors of the connectors, never a message), and a
+    // panic becomes an incident (fili-incident)
+    crate::logs::init("fili-im-daemon", "filigrane-os/fili-im", env!("CARGO_PKG_VERSION"), crate::window_parts::incidents_on());
     let store = match Store::open(&paths::database()) {
         Ok(store) => store,
         Err(e) => {
-            eprintln!("fili-im: {e:#}");
+            log::error!("{e:#}");
             return 1;
         }
     };
     let runtime = match tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build() {
         Ok(runtime) => runtime,
         Err(e) => {
-            eprintln!("fili-im: cannot start the runtime: {e}");
+            log::error!("cannot start the runtime: {e}");
             return 1;
         }
     };
@@ -111,7 +114,7 @@ impl Daemon {
         let listener = match control::listen() {
             Ok(listener) => listener,
             Err(e) => {
-                eprintln!("fili-im: cannot open the control socket: {e}");
+                log::warn!("cannot open the control socket: {e}");
                 return 1;
             }
         };
@@ -216,7 +219,7 @@ impl Daemon {
 
     pub fn debug(&self, message: &str) {
         if self.debug {
-            eprintln!("fili-im: {message}");
+            log::info!("{message}");
         }
     }
 
@@ -271,7 +274,7 @@ impl Daemon {
 
     /// The connector process is not usable (missing, crashed): say so on the account.
     fn connector_down(&self, conn: &Connector, state: &str, detail: &str) {
-        eprintln!("fili-im: {}: {detail}", conn.key);
+        log::warn!("{}: {detail}", conn.key);
         let _ = self.store.lock().unwrap().set_state(&conn.key, state, Some(detail), None);
         self.account_changed(&conn.key);
     }
@@ -282,7 +285,7 @@ impl Daemon {
         let store = || self.store.lock().unwrap();
         let logged = |what: &str, r: anyhow::Result<()>| {
             if let Err(e) = r {
-                eprintln!("fili-im: {key}: {what}: {e:#}");
+                log::warn!("{key}: {what}: {e:#}");
             }
         };
         match event {
@@ -322,7 +325,7 @@ impl Daemon {
                         self.chat_changed(id);
                         self.refresh_alerts();
                     }
-                    Err(e) => eprintln!("fili-im: {key}: chat: {e:#}"),
+                    Err(e) => log::warn!("{key}: chat: {e:#}"),
                 }
             }
             Event::ContactUpsert { contact } => {
@@ -340,7 +343,7 @@ impl Daemon {
                         }
                         self.refresh_alerts();
                     }
-                    Err(e) => eprintln!("fili-im: {key}: message: {e:#}"),
+                    Err(e) => log::warn!("{key}: message: {e:#}"),
                 }
             }
             Event::HistoryBatch { messages, progress } => {
@@ -355,7 +358,7 @@ impl Daemon {
                         }
                         self.broadcast(json!({"event": "history", "account": key, "count": stored.len(), "progress": progress}));
                     }
-                    Err(e) => eprintln!("fili-im: {key}: history: {e:#}"),
+                    Err(e) => log::warn!("{key}: history: {e:#}"),
                 }
             }
             Event::MessageEdit { chat, id, text, timestamp } => {
@@ -399,7 +402,7 @@ impl Daemon {
                 }
             }
             Event::Error { message } => {
-                eprintln!("fili-im: {key}: {message}");
+                log::warn!("{key}: {message}");
                 self.broadcast(json!({"event": "account.error", "account": key, "message": message}));
             }
         }

@@ -48,6 +48,29 @@ pub fn is_flag(arg: &str) -> bool {
     matches!(arg, "--header" | "--no-header" | "--footer" | "--no-footer")
 }
 
+/// Incidents (src/logs.rs): a crash or a QML error is recorded and reported to the user, unless `[debug] incidents = "off"`
+/// in fili-im.toml.
+pub fn incidents_on() -> bool {
+    let text = std::fs::read_to_string(config_dir().join("fili-im.toml")).unwrap_or_default();
+    incidents_setting(&text)
+}
+
+fn incidents_setting(text: &str) -> bool {
+    let mut in_debug = false;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if let Some(name) = line.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+            in_debug = name.trim() == "debug";
+        } else if in_debug
+            && let Some((k, v)) = line.split_once('=')
+            && k.trim() == "incidents"
+        {
+            return v.trim().trim_matches('"').trim() != "off";
+        }
+    }
+    true
+}
+
 /// The folder of the settings files (fili-im.toml, theme.toml).
 pub fn config_dir() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -100,5 +123,13 @@ mod tests {
     fn window_flags_are_recognised() {
         assert!(is_flag("--no-footer") && is_flag("--header"));
         assert!(!is_flag("--version") && !is_flag("ctl"));
+    }
+
+    #[test]
+    fn incidents_are_on_unless_turned_off() {
+        assert!(incidents_setting(""));
+        assert!(incidents_setting("[window]\nincidents = \"off\"\n"));
+        assert!(!incidents_setting("[debug]\nincidents = \"off\" # quiet\n"));
+        assert!(incidents_setting("[debug]\nincidents = \"on\"\n"));
     }
 }

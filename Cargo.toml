@@ -15,7 +15,9 @@ gui = ["dep:cxx", "dep:cxx-qt", "dep:cxx-qt-lib", "dep:cxx-qt-build"]
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+env_logger = { version = "0.11", default-features = false }
 libc = "0.2"
+log = "0.4"
 qrcode = { version = "0.14", default-features = false }
 rusqlite = { version = "0.38", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

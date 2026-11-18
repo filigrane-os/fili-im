@@ -34,6 +34,7 @@ pub const ACTIONS: &[&str] = &[
     "toggle-window-buttons",
     "toggle-header",
     "toggle-footer",
+    "debug",
     "copy",
     "select-all",
     "focus-composer",

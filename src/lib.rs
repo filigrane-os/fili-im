@@ -3,6 +3,7 @@
 pub mod client;
 pub mod ctl;
 pub mod daemon;
+pub mod logs;
 pub mod paths;
 pub mod policy;
 pub mod preview;

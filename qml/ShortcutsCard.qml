@@ -19,7 +19,8 @@ Rectangle {
             ["Ctrl+Shift+F", Conversations.tr("Search every message (Esc clears)")],
             ["Ctrl+U", Conversations.tr("Unread conversations only")],
             ["F5  Ctrl+R", Conversations.tr("Refresh")],
-            ["Ctrl+Shift+W", Conversations.tr("Window actions")]
+            ["Ctrl+Shift+W", Conversations.tr("Window actions")],
+            ["Ctrl+Shift+L", Conversations.tr("Debug logs")]
         ] },
         { title: Conversations.tr("Writing"), rows: [
             ["Ctrl+L", Conversations.tr("Write a message")],

@@ -237,7 +237,7 @@ pub async fn supervise(daemon: Arc<Daemon>, conn: Arc<Connector>) {
         loop {
             tokio::select! {
                 _ = watchdog.tick() => if conn.stuck() {
-                    eprintln!("fili-im: {}: still connecting after {}s; restarting the connector", conn.key, STUCK.as_secs());
+                    log::warn!("{}: still connecting after {}s; restarting the connector", conn.key, STUCK.as_secs());
                     let _ = child.start_kill();
                     *conn.phase.lock().unwrap() = (ConnState::Connecting, Instant::now());
                 },
@@ -252,7 +252,11 @@ pub async fn supervise(daemon: Arc<Daemon>, conn: Arc<Connector>) {
                         }
                         Incoming::Unknown(name) => daemon.debug(&format!("{}: skipped unknown event {name}", conn.key)),
                         // Never log the line itself: it may carry message contents.
-                        Incoming::Invalid(why) => eprintln!("fili-im: {}: invalid line from the connector: {why}", conn.key),
+                        Incoming::Invalid(why) => {
+                            // The reason can quote the line, hence a message: kept out of the log unless FILI_LOG=debug
+                            log::warn!("{}: invalid line from the connector", conn.key);
+                            log::debug!("{}: {why}", conn.key);
+                        }
                     },
                     _ => break,
                 },
