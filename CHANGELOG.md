@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 - 2026-11-18
+
+- Debug panel (View > Debug Logs, Ctrl+Shift+L): the window's log, selectable, above the footer; Copy, Open Log,
+  Clear, Ask Rob. The window logs to `~/.local/state/filigrane/logs/fili-im.log`, the daemon to `fili-im-daemon.log`.
+- A real bug (panic, QML error, Ask Rob) becomes an incident through `fili-incident` (`[debug] incidents = "off"` in
+  `fili-im.toml` turns it off).
+- View > Restart Service: the daemon and its connectors start afresh, the window reconnects on its own.
+
 ## 0.1.3 - 2026-11-16
 
 - `make release` builds only the `fili-im` program of the package (the packaging CI could not link `fili-im-fake`).

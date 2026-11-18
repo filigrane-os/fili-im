@@ -10,10 +10,11 @@ Telegram, Signal, Matrix, Discord… in one light native application.
   capabilities, never special cases in the interface.
 - **A window** (Qt Quick) and a **CLI** are clients of the daemon.
 
-Status: 0.1.0, with the WhatsApp and Google Messages connectors. See [docs/plan.md](docs/plan.md).
+Status: 0.1.4, with the WhatsApp and Google Messages connectors. See [docs/plan.md](docs/plan.md).
 
 | Version | Daemon | Connectors | Window |
 |---|---|---|---|
+| 0.1.4 | 28 MB RAM, 0 % CPU idle | WhatsApp 25 MB, Google Messages 21 MB | not measured (Debug panel only adds a closed panel) |
 | 0.1.0 | 30 MB RAM, 0.1 % CPU idle | WhatsApp 26 MB, Google Messages 19 MB | about 340 MB after 8 minutes of use (Qt Quick, pictures and previews), 2.7 % CPU averaged over that time |
 
 ## WhatsApp
