@@ -34,6 +34,9 @@ pub const ACTIONS: &[&str] = &[
     "toggle-window-buttons",
     "toggle-header",
     "toggle-footer",
+    // Test hooks of the attention colours (not in the menu)
+    "attention",
+    "attention-clear",
     "debug",
     "restart-service",
     "copy",

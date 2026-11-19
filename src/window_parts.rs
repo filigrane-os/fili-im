@@ -1,7 +1,8 @@
 //! Parts of the window that can be left out: the header (`header`, headless windows) and the footer (`footer`, the
 //! status bar). `[window] header = false` / `footer = false` (written by `fili-theme header|footer off`) in
 //! ~/.config/filigrane/fili-im.toml, which takes precedence, or in the shared ~/.config/filigrane/theme.toml; the
-//! command-line flags --no-header / --header and --no-footer / --footer win over both. Absent or invalid: the part is shown.
+//! `[window] attention = false` (`fili-theme attention off`) keeps the bands in their usual colours when the app waits for the
+//! user (--attention / --no-attention for one window). The command-line flags --no-header / --header and --no-footer / --footer win over both. Absent or invalid: the part is shown.
 //! No Qt here, so that the rule is tested with the rest of the crate.
 
 use std::path::PathBuf;
@@ -45,7 +46,7 @@ pub fn shown(key: &str, global: &str, user: &str, args: &[String]) -> bool {
 
 /// The window flags of the command line (`fili-im --no-header`): they open the window like no argument does.
 pub fn is_flag(arg: &str) -> bool {
-    matches!(arg, "--header" | "--no-header" | "--footer" | "--no-footer")
+    matches!(arg, "--header" | "--no-header" | "--footer" | "--no-footer" | "--attention" | "--no-attention")
 }
 
 /// Incidents (src/logs.rs): a crash or a QML error is recorded and reported to the user, unless `[debug] incidents = "off"`

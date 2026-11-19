@@ -14,16 +14,31 @@ ApplicationWindow {
     // Header and footer follow Settings > Appearance live; search shows the header, a notice shows the footer
     property bool showHeader: Conversations.header()
     property bool showFooter: Conversations.footer()
+    // The app waits for the user (attentionText says why): header and footer take the accent colour when the setting is on
+    // (Settings > Appearance, `fili-theme attention`). Raised by attend(), lowered by a click on the bands, by an action
+    // or when the window is activated.
+    property bool attentionOn: Conversations.attention()
+    property string attentionText: ""
+    readonly property bool attending: attentionOn && attentionText !== ""
+    // Text on the accent: dark or white, whichever reads better
+    readonly property color onAccent: (0.299 * FiliTheme.accentColor.r + 0.587 * FiliTheme.accentColor.g + 0.114 * FiliTheme.accentColor.b) > 0.55 ? "#14181f" : "#ffffff"
+    // Controls of the header while it is in the accent colour: a tint of the text colour instead of the usual surfaces
+    readonly property color tintSurface: FiliTheme.alpha(onAccent, 0.12)
+    readonly property color tintHover: FiliTheme.alpha(onAccent, 0.2)
+    readonly property color tintBorder: FiliTheme.alpha(onAccent, 0.3)
+    function attend(text) { attentionText = text || Conversations.tr("Needs your attention"); }
+    onActiveChanged: if (active) attentionText = ""
     property bool searchOpen: false
     property string notice: ""
     property string operation: ""
     readonly property bool headerShown: showHeader || searchOpen || searchInput.text !== ""
-    readonly property bool footerShown: showFooter || notice !== "" || operation !== ""
+    readonly property bool footerShown: showFooter || notice !== "" || operation !== "" || attending
     Connections {
         target: Conversations
         function onThemeChanged() {
             win.showHeader = Conversations.header();
             win.showFooter = Conversations.footer();
+            win.attentionOn = Conversations.attention();
         }
     }
     FontLoader { source: "qrc:/qt/qml/Fili/Im/fonts/Jost-Variable.ttf" }
@@ -301,6 +316,10 @@ ApplicationWindow {
             chats = copy;
         } else if (e.event === "message") {
             if (scopeIds().includes(e.message.chat)) conversation.apply(e.message);
+            // A message from someone, while another window is in front (muted conversations stay quiet)
+            const c = chatById(e.message.chat);
+            if (!e.message.from_me && !win.active && !(c && c.muted))
+                win.attend((c ? c.title + ": " : "") + (e.message.text && e.message.text.plain ? e.message.text.plain : Conversations.tr("New message")));
         } else if (e.event === "presence") {
             presence = e.state;
             presenceAccounts = e.accounts || {};
@@ -377,6 +396,8 @@ ApplicationWindow {
             else if (name === "window-actions") windowPanel.visible ? windowPanel.close() : windowPanel.open();
             else if (name === "toggle-header") win.showHeader = !win.showHeader;
             else if (name === "toggle-footer") win.showFooter = !win.showFooter;
+            else if (name === "attention") win.attend("");
+            else if (name === "attention-clear") win.attentionText = "";
             else if (name === "debug") debug.open = !debug.open;
             else if (name === "restart-service") win.restartService();
             else if (name === "toggle-window-buttons") win.toggleWindowButtons();
@@ -427,7 +448,8 @@ ApplicationWindow {
         visible: win.headerShown
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: visible ? FiliTheme.toolbarHeight : 0
-        color: FiliTheme.background
+        color: win.attending ? FiliTheme.accentColor : FiliTheme.background
+        MouseArea { anchors.fill: parent; z: -1; enabled: win.attending; onClicked: win.attentionText = "" }
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
         Column {
             anchors { left: parent.left; leftMargin: FiliTheme.margin; right: tools.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
@@ -438,7 +460,7 @@ ApplicationWindow {
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.size
                 font.weight: FiliTheme.weightAccent
-                color: FiliTheme.text
+                color: win.attending ? win.onAccent : FiliTheme.text
             }
             Text {
                 width: parent.width
@@ -447,7 +469,7 @@ ApplicationWindow {
                 elide: Text.ElideRight
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.sizeList
-                color: FiliTheme.textSecondary
+                color: win.attending ? FiliTheme.alpha(win.onAccent, 0.75) : FiliTheme.textSecondary
             }
         }
         Row {
@@ -455,9 +477,11 @@ ApplicationWindow {
             anchors { right: search.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             spacing: FiliTheme.space1
             // Where it matters: write to someone (Ctrl+K), and the user's status (a click opens the choices)
-            IconButton { name: "compose"; tip: Conversations.tr("New conversation") + "  Ctrl+K"; onClicked: switchCard.show() }
+            IconButton { name: "compose"; accented: win.attending; ink: win.onAccent; tip: Conversations.tr("New conversation") + "  Ctrl+K"; onClicked: switchCard.show() }
             IconButton {
                 id: statusButton
+                accented: win.attending
+                ink: win.onAccent
                 tip: Conversations.tr("Status") + ": " + win.presenceLabel(win.presence)
                 onClicked: { const p = statusButton.mapToItem(null, 0, statusButton.height + 2); win.openStatusMenu(p.x - 120, p.y); }
                 Rectangle { anchors.centerIn: parent; width: 12; height: 12; radius: 6; color: win.presenceColor(win.presence) }
@@ -471,7 +495,7 @@ ApplicationWindow {
             height: 24
             radius: FiliTheme.radiusControl
             color: closeArea.pressed ? FiliTheme.danger : closeArea.containsMouse ? FiliTheme.alpha(FiliTheme.danger, 0.75) : "transparent"
-            WindowGlyph { anchors.centerIn: parent; kind: "close"; width: 16; height: 16; color: closeArea.containsMouse ? "#ffffff" : FiliTheme.text }
+            WindowGlyph { anchors.centerIn: parent; kind: "close"; width: 16; height: 16; color: closeArea.containsMouse ? "#ffffff" : win.attending ? win.onAccent : FiliTheme.text }
             MouseArea { id: closeArea; anchors.fill: parent; hoverEnabled: true; onClicked: Qt.quit() }
             Accessible.role: Accessible.Button
             Accessible.name: Conversations.tr("Close window")
@@ -483,8 +507,8 @@ ApplicationWindow {
             width: 28
             height: 24
             radius: FiliTheme.radiusControl
-            color: windowArea.pressed ? FiliTheme.surfaceActive : windowArea.containsMouse || windowPanel.visible ? FiliTheme.surfaceHover : "transparent"
-            WindowGlyph { anchors.centerIn: parent; kind: "window"; width: 16; height: 16 }
+            color: windowArea.pressed || windowArea.containsMouse || windowPanel.visible ? (win.attending ? win.tintHover : windowArea.pressed ? FiliTheme.surfaceActive : FiliTheme.surfaceHover) : "transparent"
+            WindowGlyph { anchors.centerIn: parent; kind: "window"; width: 16; height: 16; color: win.attending ? win.onAccent : FiliTheme.text }
             MouseArea { id: windowArea; anchors.fill: parent; hoverEnabled: true; onClicked: windowPanel.visible ? windowPanel.close() : windowPanel.open() }
             Accessible.role: Accessible.Button
             Accessible.name: Conversations.tr("Window")
@@ -495,16 +519,16 @@ ApplicationWindow {
             width: 180
             height: 26
             radius: FiliTheme.radiusControl
-            color: FiliTheme.surface
+            color: win.attending ? win.tintSurface : FiliTheme.surface
             border.width: FiliTheme.borderWidth
-            border.color: searchInput.activeFocus ? FiliTheme.accentColor : FiliTheme.border
+            border.color: win.attending ? (searchInput.activeFocus ? win.onAccent : win.tintBorder) : searchInput.activeFocus ? FiliTheme.accentColor : FiliTheme.border
             Text {
                 anchors { left: parent.left; leftMargin: FiliTheme.space2; verticalCenter: parent.verticalCenter }
                 visible: searchInput.text === ""
                 text: Conversations.tr("Search")
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.size
-                color: FiliTheme.muted
+                color: win.attending ? FiliTheme.alpha(win.onAccent, 0.6) : FiliTheme.muted
             }
             Rectangle {
                 id: searchClear
@@ -524,7 +548,7 @@ ApplicationWindow {
                 clip: true
                 font.family: FiliTheme.font
                 font.pixelSize: FiliTheme.size
-                color: FiliTheme.text
+                color: win.attending ? win.onAccent : FiliTheme.text
                 selectionColor: FiliTheme.surfaceActive
                 onTextChanged: searchTimer.restart()
                 Keys.onEscapePressed: { text = ""; win.query = ""; win.results = []; win.searchOpen = false; focus = false }
@@ -571,9 +595,26 @@ ApplicationWindow {
         visible: win.footerShown
         anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
         height: visible ? FiliTheme.statusHeight : 0
-        color: FiliTheme.backgroundDeep
+        color: win.attending ? FiliTheme.accentColor : FiliTheme.backgroundDeep
+        MouseArea { anchors.fill: parent; z: -1; enabled: win.attending; onClicked: win.attentionText = "" }
+        // What the app waits for, over the usual content
+        Text {
+            anchors { fill: parent; leftMargin: FiliTheme.margin; rightMargin: FiliTheme.margin }
+            z: 1
+            visible: win.attending
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: win.attentionText
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.sizeSmall
+            font.weight: FiliTheme.weightAccent
+            color: win.onAccent
+        }
         Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: FiliTheme.borderWidth; color: FiliTheme.border }
         Text {
+            visible: !win.attending
             anchors { left: parent.left; leftMargin: FiliTheme.margin; right: states.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             text: win.notice !== "" ? win.notice : win.operation
             elide: Text.ElideRight
@@ -584,6 +625,7 @@ ApplicationWindow {
         }
         Text {
             id: states
+            visible: !win.attending
             anchors { right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
             text: win.accounts.map(a => (win.multi ? platformName(a.platform) + " " : "") + (a.self_name || a.name) + ": " + sidebar.stateWord(a)).join("   ")
             font.family: FiliTheme.font

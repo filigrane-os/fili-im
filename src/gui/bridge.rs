@@ -49,6 +49,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "footer"]
         fn footer(self: &Conversations) -> bool;
+        // Header and footer take the accent colour while the app waits for the user ([window] attention, --no-attention)
+        #[qinvokable]
+        #[cxx_name = "attention"]
+        fn attention(self: &Conversations) -> bool;
         // Interface state kept between runs (~/.local/state/filigrane/im/ui, lines key=value)
         #[qinvokable]
         #[cxx_name = "uiGet"]
@@ -303,6 +307,10 @@ impl qobject::Conversations {
 
     pub fn footer(&self) -> bool {
         crate::window_parts::shown_now("footer")
+    }
+
+    pub fn attention(&self) -> bool {
+        crate::window_parts::shown_now("attention")
     }
 
     pub fn start_voice(self: Pin<&mut Self>, path: &QString) -> bool {
