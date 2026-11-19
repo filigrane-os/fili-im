@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 - 2026-11-19
+
+- The window asks for attention: the header and footer take the accent colour when a message arrives while another window is in front (`[window] attention`, `--no-attention`).
+- Header: an Ask Rob button (left of the window button) shows Rob's small floating field for Conversations (`fili-chat here`).
+- Quick Look and video links follow the default audio output of the system instead of the one found when the player was created.
+- Command line: `fili-im chats --find NAME` filters conversations by a part of the title (case and accents ignored), and `fili-im send` accepts a part of the title instead of the number: one match sends, several list the candidates and send nothing.
+
 ## 0.1.4 - 2026-11-18
 
 - Debug panel (View > Debug Logs, Ctrl+Shift+L): the window's log, selectable, above the footer; Copy, Open Log,
