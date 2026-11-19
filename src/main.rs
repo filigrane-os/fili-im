@@ -36,6 +36,9 @@ enum Cmd {
     Remove { account: String },
     /// Conversations, pinned then most recent
     Chats {
+        /// Only conversations whose title contains TEXT (case and accents ignored)
+        #[arg(long)]
+        find: Option<String>,
         #[arg(long)]
         account: Option<String>,
         /// Only conversations with unread messages
@@ -50,8 +53,9 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         limit: i64,
     },
-    /// Send a text message
-    Send { chat: i64, text: String },
+    /// Send a text message. TARGET is a conversation number, or a part of its title ("fili-im send Anna hello"): one match
+    /// sends, several list the candidates and send nothing
+    Send { target: String, text: String },
     /// Mark a conversation read here
     Read {
         chat: i64,
@@ -110,6 +114,22 @@ fn print(json_out: bool, value: &Value, text: impl FnOnce(&Value) -> String) {
             println!("{out}");
         }
     }
+}
+
+/// Lowercase without accents, to find a conversation by a part of its title
+fn fold(s: &str) -> String {
+    s.chars()
+        .flat_map(|c| c.to_lowercase())
+        .map(|c| match c {
+            'à' | 'â' | 'ä' | 'á' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' | 'í' => 'i',
+            'ô' | 'ö' | 'ó' => 'o',
+            'ù' | 'û' | 'ü' | 'ú' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
 }
 
 fn time_of(ms: i64) -> String {
@@ -203,8 +223,13 @@ fn run(cli: Cli) -> Result<()> {
             client.call("account.remove", json!({"account": account}))?;
             print(j, &json!({}), |_| format!("Removed {account}"));
         }
-        Cmd::Chats { account, unread, limit } => {
-            let chats = client.call("chats.list", json!({"account": account, "unread": unread, "limit": limit}))?;
+        Cmd::Chats { find, account, unread, limit } => {
+            let mut chats = client.call("chats.list", json!({"account": account, "unread": unread, "limit": if find.is_some() { 1000 } else { limit }}))?;
+            if let (Some(find), Some(list)) = (&find, chats.as_array_mut()) {
+                let want = fold(find);
+                list.retain(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want));
+                list.truncate(limit.max(0) as usize);
+            }
             print(j, &chats, |c| {
                 c.as_array()
                     .into_iter()
@@ -231,9 +256,30 @@ fn run(cli: Cli) -> Result<()> {
             let messages = client.call("messages.list", json!({"chat": chat, "limit": limit}))?;
             print(j, &messages, |m| m.as_array().into_iter().flatten().map(message_line).collect::<Vec<_>>().join("\n"));
         }
-        Cmd::Send { chat, text } => {
+        Cmd::Send { target, text } => {
+            let (chat, title) = match target.parse::<i64>() {
+                Ok(id) => (id, None),
+                Err(_) => {
+                    let all = client.call("chats.list", json!({"limit": 1000}))?;
+                    let want = fold(&target);
+                    let hits: Vec<&Value> =
+                        all.as_array().into_iter().flatten().filter(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want)).collect();
+                    match hits.as_slice() {
+                        [] => anyhow::bail!("no conversation matches {target:?}"),
+                        [one] => (one["id"].as_i64().unwrap_or(0), one["title"].as_str().map(str::to_string)),
+                        many => {
+                            let list: Vec<String> =
+                                many.iter().map(|c| format!("{:>5}  {}", c["id"], c["title"].as_str().unwrap_or(""))).collect();
+                            anyhow::bail!("{} conversations match {target:?}, nothing sent; use the number:\n{}", many.len(), list.join("\n"))
+                        }
+                    }
+                }
+            };
             let message = client.call("send", json!({"chat": chat, "text": text}))?;
-            print(j, &message, |_| String::new());
+            print(j, &message, |_| match &title {
+                Some(t) => format!("Sent to {t} ({chat})"),
+                None => format!("Sent to conversation {chat}"),
+            });
         }
         Cmd::Read { chat, receipt } => {
             let result = client.call("mark_read", json!({"chat": chat, "receipt": receipt}))?;
