@@ -156,6 +156,14 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "openPath"]
         fn open_path(self: &Conversations, path: &QString);
+        // "Ask Rob" header button: `fili-chat here` shows the small field of Rob scoped to this application; the button
+        // shows only where `fili-chat` is installed
+        #[qinvokable]
+        #[cxx_name = "askRob"]
+        fn ask_rob(self: &Conversations);
+        #[qinvokable]
+        #[cxx_name = "robAvailable"]
+        fn rob_available(self: &Conversations) -> bool;
         #[qinvokable]
         #[cxx_name = "reportProblem"]
         fn report_problem(self: &Conversations, text: &QString) -> QString;
@@ -494,6 +502,18 @@ impl qobject::Conversations {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
+    }
+
+    pub fn ask_rob(&self) {
+        use std::process::{Command, Stdio};
+        let child = Command::new("fili-chat").arg("here").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        if let Ok(mut child) = child {
+            std::thread::spawn(move || child.wait());
+        }
+    }
+
+    pub fn rob_available(&self) -> bool {
+        std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("fili-chat").is_file()))
     }
 
     pub fn report_problem(&self, text: &QString) -> QString {
