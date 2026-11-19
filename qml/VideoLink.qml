@@ -50,10 +50,12 @@ Item {
             else { v.phase = "error"; v.error = r.error || ""; }
         }
     }
+    MediaDevices { id: outputs }
     MediaPlayer {
         id: player
         videoOutput: out
-        audioOutput: AudioOutput { }
+        // Follows the default output of the system (a fixed AudioOutput keeps the one it found when it was created)
+        audioOutput: AudioOutput { device: outputs.defaultAudioOutput }
         onErrorOccurred: (e, text) => { v.phase = "error"; v.error = text; }
         onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && v.startAt > 0 && !v.resumed) { v.resumed = true; player.position = v.startAt; }
     }

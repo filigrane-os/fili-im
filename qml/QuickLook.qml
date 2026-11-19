@@ -153,6 +153,7 @@ Rectangle {
     Keys.onRightPressed: go(1)
     Keys.onSpacePressed: isPage ? close() : playable && path !== "" ? togglePlay() : close()
 
+    MediaDevices { id: outputs }
     MediaPlayer {
         id: player
         onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && ql.autoplay && ql.visible) play()
@@ -162,7 +163,9 @@ Rectangle {
             else ql.playerError = text;
         }
         videoOutput: video
-        audioOutput: AudioOutput { }
+        // Follows the default output of the system: this player lives as long as the window, so a fixed AudioOutput
+        // would keep the output found at launch (the internal speakers) after the default changed
+        audioOutput: AudioOutput { device: outputs.defaultAudioOutput }
     }
 
     // A click on the background closes it
