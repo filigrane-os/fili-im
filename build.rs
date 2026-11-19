@@ -46,6 +46,7 @@ fn main() {
                 "qml/FocusRing.qml",
                 "qml/PopupMenu.qml",
                 "qml/DebugPanel.qml",
+                "qml/RobButton.qml",
             ])
             .qml_file(QmlFile::from("qml/FiliTheme.qml").singleton(true))
             .depend("QtQuick")
