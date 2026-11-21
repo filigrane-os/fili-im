@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0 - 2026-11-21
+
+- Everything Conversations brings to the desktop now lives in this repository and is installed with it (`make install`): the launcher and icon, and what the Filigrane shell reads, in `shell/`, instead of being kept in the distribution's repository: the `messages` module of the fili-bar (`shell/fili-bar/messages/`, with its French translations), the fallback menu of the bar (`shell/appmenu/fili-im.json`) and the brief of Rob for this application (`shell/rob/fili-im.md`). The package puts it in `/usr/share/filigrane/shell/`, `fili-bar link-system` (run at login) links it into the bar and the menus; a module, menu or brief of your own with the same name wins.
+- New `make install-data` (everything but the programs). `scripts/check-shell-menu.py` (run by `make test`, so by the CI) checks that the bar menu agrees with the actions and shortcuts of the window, and that the brief of Rob exists.
+
 ## 0.1.5 - 2026-11-19
 
 - The window asks for attention: the header and footer take the accent colour when a message arrives while another window is in front (`[window] attention`, `--no-attention`).

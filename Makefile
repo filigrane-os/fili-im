@@ -4,6 +4,11 @@
 #   make release                       build everything in release mode (needs Go and a C compiler, and cxx-qt's qmake: QMAKE=/usr/lib/qt6/bin/qmake6)
 #   sudo make install                  install under /usr/local (PREFIX=/usr for a system package)
 #   make install DESTDIR=pkg PREFIX=/usr   stage into a directory (packagers)
+#   make install-data PREFIX=~/.local      everything but the programs (launcher, icon, licences, what the shell reads)
+#
+# Everything the application brings to the Filigrane desktop lives here and is installed together: the programs, the launcher,
+# the icon, and shell/ (the module of the fili-bar, the fallback menu of the bar, the brief of Rob), which ends in
+# $(DATADIR)/filigrane/shell/ where `fili-bar link-system` finds it.
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
@@ -11,7 +16,7 @@ DATADIR ?= $(PREFIX)/share
 TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 PROGRAMS = fili-im fili-im-whatsapp fili-im-gmessages
 
-.PHONY: build release test check fmt connectors connectors-release install uninstall
+.PHONY: build release test check fmt connectors connectors-release install install-data uninstall
 
 GO_BUILD = CGO_ENABLED=1 go build -trimpath -ldflags="-s -w"
 
@@ -32,21 +37,28 @@ connectors-release:
 	cd connectors/whatsapp && $(GO_BUILD) -o $(abspath $(TARGET_DIR))/release/fili-im-whatsapp .
 	cd connectors/gmessages && $(GO_BUILD) -o $(abspath $(TARGET_DIR))/release/fili-im-gmessages .
 
-install: release
+install: release install-data
 	for p in $(PROGRAMS); do install -Dm755 $(TARGET_DIR)/release/$$p $(DESTDIR)$(BINDIR)/$$p; done
+
+install-data:
 	install -Dm644 data/fili-im.desktop $(DESTDIR)$(DATADIR)/applications/fili-im.desktop
 	install -Dm644 data/icons/hicolor/scalable/apps/fili-im.svg $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/fili-im.svg
 	install -Dm644 LICENSE $(DESTDIR)$(DATADIR)/licenses/fili-im/LICENSE
 	for f in licenses/*; do install -Dm644 $$f $(DESTDIR)$(DATADIR)/licenses/fili-im/$$(basename $$f); done
+	mkdir -p $(DESTDIR)$(DATADIR)/filigrane/shell
+	cp -r shell/. $(DESTDIR)$(DATADIR)/filigrane/shell/
 
 uninstall:
 	for p in $(PROGRAMS); do rm -f $(DESTDIR)$(BINDIR)/$$p; done
 	rm -f $(DESTDIR)$(DATADIR)/applications/fili-im.desktop
 	rm -f $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/fili-im.svg
 	rm -rf $(DESTDIR)$(DATADIR)/licenses/fili-im
+	rm -rf $(DESTDIR)$(DATADIR)/filigrane/shell/fili-bar/messages
+	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/rob/fili-im.md
 
 test:
 	cargo test
+	python3 -I scripts/check-shell-menu.py
 	cd connectors/whatsapp && go test ./...
 	cd connectors/gmessages && go test ./...
 
