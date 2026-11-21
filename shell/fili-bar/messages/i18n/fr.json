@@ -1,0 +1,22 @@
+{
+ "ACCOUNTS": "COMPTES",
+ "Conversations": "Conversations",
+ "Mark as read": "Marquer comme lu",
+ "Message deleted": "Message supprimé",
+ "Messages": "Messages",
+ "No account yet": "Aucun compte pour l'instant",
+ "No conversation": "Aucune conversation",
+ "Open": "Ouvrir",
+ "Open Conversations": "Ouvrir Conversations",
+ "Reply…": "Répondre…",
+ "Sent": "Envoyé",
+ "You": "Vous",
+ "blocked": "bloqué",
+ "click: panel · right click: menu · middle click: open Conversations": "clic: panneau · clic droit: menu · clic milieu: ouvrir Conversations",
+ "connected": "connecté",
+ "connecting": "connexion en cours",
+ "error": "erreur",
+ "needs pairing": "à appairer",
+ "phone offline": "téléphone hors ligne",
+ "signed out": "déconnecté"
+}
