@@ -17,5 +17,166 @@
       "summary": "JSON list of the action names",
       "reads": true
     }
+  ],
+  "actions": [
+    {
+      "name": "new-conversation",
+      "label": "Go to Conversation…",
+      "keys": "Ctrl+K"
+    },
+    {
+      "name": "search",
+      "label": "Find in Conversation…",
+      "keys": "Ctrl+F"
+    },
+    {
+      "name": "search-all",
+      "label": "Search All Messages…",
+      "keys": "Ctrl+Shift+F"
+    },
+    {
+      "name": "next-conversation",
+      "label": "Next Conversation",
+      "keys": "Alt+Down"
+    },
+    {
+      "name": "previous-conversation",
+      "label": "Previous Conversation",
+      "keys": "Alt+Up"
+    },
+    {
+      "name": "next-tab",
+      "label": "Next Tab",
+      "keys": "Ctrl+Tab"
+    },
+    {
+      "name": "previous-tab",
+      "label": "Previous Tab",
+      "keys": "Ctrl+Shift+Tab"
+    },
+    {
+      "name": "close-tab",
+      "label": "Close Tab",
+      "keys": "Ctrl+W"
+    },
+    {
+      "name": "reply",
+      "label": "Reply to Last Message"
+    },
+    {
+      "name": "shortcuts",
+      "label": "Keyboard Shortcuts",
+      "keys": "F1"
+    },
+    {
+      "name": "mark-read",
+      "label": "Mark as Read"
+    },
+    {
+      "name": "refresh",
+      "label": "Refresh",
+      "keys": "F5"
+    },
+    {
+      "name": "add-account",
+      "label": "Add Account…"
+    },
+    {
+      "name": "pair",
+      "label": "Link Account…"
+    },
+    {
+      "name": "about",
+      "label": "About Conversations"
+    },
+    {
+      "name": "close",
+      "label": "Close",
+      "keys": "Ctrl+Q"
+    },
+    {
+      "name": "all",
+      "label": "All Conversations"
+    },
+    {
+      "name": "unread-box",
+      "label": "Unread",
+      "keys": "Ctrl+U"
+    },
+    {
+      "name": "window-actions",
+      "label": "Window Actions…",
+      "keys": "Ctrl+Shift+W"
+    },
+    {
+      "name": "toggle-window-buttons",
+      "label": "Show Window Buttons"
+    },
+    {
+      "name": "toggle-header",
+      "label": "Show Header"
+    },
+    {
+      "name": "toggle-footer",
+      "label": "Show Status Bar"
+    },
+    {
+      "name": "attention"
+    },
+    {
+      "name": "attention-clear"
+    },
+    {
+      "name": "debug",
+      "label": "Debug Logs",
+      "keys": "Ctrl+Shift+L"
+    },
+    {
+      "name": "restart-service",
+      "label": "Restart Service"
+    },
+    {
+      "name": "copy",
+      "label": "Copy",
+      "keys": "Ctrl+C"
+    },
+    {
+      "name": "select-all",
+      "label": "Select All",
+      "keys": "Ctrl+A"
+    },
+    {
+      "name": "focus-composer",
+      "label": "Write a Message",
+      "keys": "Ctrl+L"
+    },
+    {
+      "name": "contact-info",
+      "label": "Contact Info…"
+    },
+    {
+      "name": "record-voice",
+      "label": "Record a Voice Message",
+      "keys": "Ctrl+Shift+R"
+    },
+    {
+      "name": "quick-look"
+    },
+    {
+      "name": "status-available",
+      "label": "Online"
+    },
+    {
+      "name": "status-away",
+      "label": "Away"
+    },
+    {
+      "name": "status-busy",
+      "label": "Busy"
+    },
+    {
+      "name": "status-offline",
+      "label": "Offline"
+    }
   ]
 }
