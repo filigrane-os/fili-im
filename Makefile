@@ -7,7 +7,7 @@
 #   make install-data PREFIX=~/.local      everything but the programs (launcher, icon, licences, what the shell reads)
 #
 # Everything the application brings to the Filigrane desktop lives here and is installed together: the programs, the launcher,
-# the icon, and shell/ (the module of the fili-bar, the fallback menu of the bar, the brief of Rob), which ends in
+# the icon, and shell/ (the module of the fili-bar, the fallback menu of the bar, the brief of Lia), which ends in
 # $(DATADIR)/filigrane/shell/ where `fili-bar link-system` finds it.
 PREFIX ?= /usr/local
 DESTDIR ?=
@@ -54,7 +54,7 @@ uninstall:
 	rm -f $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/fili-im.svg
 	rm -rf $(DESTDIR)$(DATADIR)/licenses/fili-im
 	rm -rf $(DESTDIR)$(DATADIR)/filigrane/shell/fili-bar/messages
-	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/ctl/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/rob/fili-im.md
+	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/ctl/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/lia/fili-im.md
 
 test:
 	cargo test

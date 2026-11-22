@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The fili-bar menu of Conversations (shell/appmenu/fili-im.json) stays in agreement with the window (qml/Main.qml): every
 `fili-im ctl --pid %pid action NAME` of the menu is an action of the window, every action of the window is in the menu (the few
-that have none are listed below), every announced shortcut is a key sequence of the window's QML, and the brief of Rob
-(shell/rob/fili-im.md) exists. Usage: scripts/check-shell-menu.py (from anywhere)."""
+that have none are listed below), every announced shortcut is a key sequence of the window's QML, and the brief of Lia
+(shell/lia/fili-im.md) exists. Usage: scripts/check-shell-menu.py (from anywhere)."""
 import json, pathlib, re, sys
 
 root = pathlib.Path(__file__).resolve().parents[1]
@@ -20,8 +20,8 @@ without_menu = {"attention", "attention-clear", "quick-look"}
 # Keys the text fields handle themselves (copy and select all), not a Shortcut of the window
 native_keys = {"Ctrl+C", "Ctrl+A"}
 errors = []
-if not (root / "shell/rob/fili-im.md").is_file():
-    errors.append("brief of Rob missing: shell/rob/fili-im.md")
+if not (root / "shell/lia/fili-im.md").is_file():
+    errors.append("brief of Lia missing: shell/lia/fili-im.md")
 
 def entries(items):
     for e in items:

@@ -142,8 +142,8 @@ pub mod qobject {
         fn copy_text(self: &Conversations, text: &QString);
         // Debug panel (src/logs.rs, qml/DebugPanel.qml, shared with the other fili-* applications): the log entries after
         // number `since` as JSON {"seq": last number, "entries": [[level, text], ...]} (level 0 debug, 1 info, 2 warning,
-        // 3 error), the file of the log, a way to empty the panel, the file opened by its application, "Ask Rob" (records
-        // an incident and asks Rob to look at it: its id, "" on failure), and uiState / setUiState, the names the shared
+        // 3 error), the file of the log, a way to empty the panel, the file opened by its application, "Ask Lia" (records
+        // an incident and asks Lia to look at it: its id, "" on failure), and uiState / setUiState, the names the shared
         // panel uses for uiGet / uiSet
         #[qinvokable]
         fn logs(self: &Conversations, since: i32) -> QString;
@@ -156,14 +156,14 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "openPath"]
         fn open_path(self: &Conversations, path: &QString);
-        // "Ask Rob" header button: `fili-ai here` shows the small field of Rob scoped to this application; the button
+        // "Ask Lia" header button: `fili-ai here` shows the small field of Lia scoped to this application; the button
         // shows only where the assistant (`fili-ai-daemon`) is installed
         #[qinvokable]
-        #[cxx_name = "askRob"]
-        fn ask_rob(self: &Conversations);
+        #[cxx_name = "askLia"]
+        fn ask_lia(self: &Conversations);
         #[qinvokable]
-        #[cxx_name = "robAvailable"]
-        fn rob_available(self: &Conversations) -> bool;
+        #[cxx_name = "liaAvailable"]
+        fn lia_available(self: &Conversations) -> bool;
         #[qinvokable]
         #[cxx_name = "reportProblem"]
         fn report_problem(self: &Conversations, text: &QString) -> QString;
@@ -504,7 +504,7 @@ impl qobject::Conversations {
             .spawn();
     }
 
-    pub fn ask_rob(&self) {
+    pub fn ask_lia(&self) {
         use std::process::{Command, Stdio};
         let child = Command::new("fili-ai").arg("here").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
         if let Ok(mut child) = child {
@@ -512,7 +512,7 @@ impl qobject::Conversations {
         }
     }
 
-    pub fn rob_available(&self) -> bool {
+    pub fn lia_available(&self) -> bool {
         std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("fili-ai-daemon").is_file()))
     }
 
