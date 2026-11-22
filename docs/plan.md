@@ -4,7 +4,7 @@ Status: P0 done 2026-11-15; P1 connector built 2026-11-15 (text, receipts, react
 
 Conversations is Filigrane's instant messaging application: one place for WhatsApp, then Telegram, Discord, Signal and
 others. Program `fili-im`, display name **Conversations** (plain in French and English, next to Casier, Facteur,
-Aéroport, Cassette). `fili-chat` is already taken by Rob, the AI chat.
+Aéroport, Cassette). `fili-chat` was taken by Rob, the AI chat (now `fili-ai`).
 
 It follows Facteur's model: a **daemon** that stays connected and notifies even when the window is closed, a **fili-bar
 module** with the unread count, and a **window** that is only a client of the daemon.
