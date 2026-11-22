@@ -13,7 +13,6 @@
     },
     {
       "verb": "actions",
-      "args": "",
       "summary": "JSON list of the action names",
       "reads": true
     }
@@ -177,6 +176,12 @@
     {
       "name": "status-offline",
       "label": "Offline"
+    }
+  ],
+  "action_patterns": [
+    {
+      "pattern": "open-chat:<id>",
+      "summary": "Show a conversation by its numeric id (from a notification or the bar panel)"
     }
   ]
 }

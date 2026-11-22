@@ -59,7 +59,7 @@ uninstall:
 test:
 	cargo test
 	python3 -I scripts/check-shell-menu.py
-	python3 -I scripts/check-ctl-catalog.py
+	python3 -I scripts/fili-api-lint --app .
 	cd connectors/whatsapp && go test ./...
 	cd connectors/gmessages && go test ./...
 
