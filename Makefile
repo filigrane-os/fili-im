@@ -54,11 +54,12 @@ uninstall:
 	rm -f $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/fili-im.svg
 	rm -rf $(DESTDIR)$(DATADIR)/licenses/fili-im
 	rm -rf $(DESTDIR)$(DATADIR)/filigrane/shell/fili-bar/messages
-	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/rob/fili-im.md
+	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/ctl/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/rob/fili-im.md
 
 test:
 	cargo test
 	python3 -I scripts/check-shell-menu.py
+	python3 -I scripts/check-ctl-catalog.py
 	cd connectors/whatsapp && go test ./...
 	cd connectors/gmessages && go test ./...
 
