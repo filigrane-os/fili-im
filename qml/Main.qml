@@ -702,6 +702,10 @@ ApplicationWindow {
     }
 
     PairDialog { id: pairDialog; anchors.fill: parent }
+    // The label under a button (FiliIconButton calls win.showTip / hideTip): the kit's tooltip card
+    function showTip(owner, text) { tooltip.show(owner, { text: text }); }
+    function hideTip(owner) { tooltip.hide(owner); }
+    FiliTooltip { id: tooltip; blocked: windowPanel.visible || debug.open }
     FiliWindowPanel {
         id: windowPanel
         anchorRight: width - (toolbar.height - closeButton.height) / 2
