@@ -1,6 +1,7 @@
 // The conversation list (or the search results while a query is active): one row per conversation, newest first.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: list
@@ -30,12 +31,13 @@ Rectangle {
         id: filterBar
         anchors { top: parent.top; left: parent.left; right: parent.right; rightMargin: FiliTheme.borderWidth }
         height: 40
-        SearchField {
+        FiliTextField {
+            clearable: true
             id: filterField
             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: FiliTheme.space3; rightMargin: FiliTheme.space3 }
-            placeholderText: Conversations.tr("Find a conversation")
+            placeholder: Conversations.tr("Find a conversation")
             onTextChanged: win.listFilter = text
-            Keys.onEscapePressed: { text = ""; focus = false; }
+            Keys.onEscapePressed: { text = ""; blurField(); }
             Keys.onReturnPressed: if (list.rows.length > 0 && list.rows[0].id) win.openChat(list.rows[0].id)
         }
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.alpha(FiliTheme.border, 0.5) }
@@ -140,7 +142,7 @@ Rectangle {
             Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.alpha(FiliTheme.border, 0.5) }
         }
     }
-    function focusFilter() { filterField.forceActiveFocus(); filterField.selectAll(); }
+    function focusFilter() { filterField.focusField(); filterField.selectAll(); }
     FiliScrollBar { flick: view; anchors { top: view.top; bottom: view.bottom; right: view.right } }
     Text {
         anchors.centerIn: parent

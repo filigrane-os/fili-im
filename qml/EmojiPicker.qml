@@ -1,6 +1,7 @@
 // Emoji picker (the list of the keyboard panel): a search field and a grid; `picked(emoji)`, Esc or a click outside closes.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: card
@@ -35,10 +36,11 @@ Rectangle {
         border.width: FiliTheme.borderWidth
         border.color: FiliTheme.border
         MouseArea { anchors.fill: parent }
-        SearchField {
+        FiliTextField {
+            clearable: true
             id: field
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space3 }
-            placeholderText: Conversations.tr("Search emoji")
+            placeholder: Conversations.tr("Search emoji")
             Keys.onEscapePressed: card.visible = false
             Keys.onReturnPressed: if (card.found.length) card.choose(card.found[0].c)
             Keys.onEnterPressed: if (card.found.length) card.choose(card.found[0].c)

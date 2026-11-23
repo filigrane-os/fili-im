@@ -10,11 +10,12 @@ publish = false
 # The window (Qt Quick) is the default build; `--no-default-features` keeps the daemon, the CLI and the fake connector
 # alone, which is also how the tests link without Qt.
 default = ["gui"]
-gui = ["dep:cxx", "dep:cxx-qt", "dep:cxx-qt-lib", "dep:cxx-qt-build"]
+gui = ["dep:fili-ui", "dep:cxx", "dep:cxx-qt", "dep:cxx-qt-lib", "dep:cxx-qt-build"]
 
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+fili-ui = { path = "../fili-ui-icons", optional = true }
 env_logger = { version = "0.11", default-features = false }
 libc = "0.2"
 log = "0.4"

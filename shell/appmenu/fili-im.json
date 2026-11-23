@@ -126,6 +126,19 @@
           "sep": true
         },
         {
+          "label": "Back",
+          "keys": "Alt+Left",
+          "exec": "fili-im ctl --pid %pid action back"
+        },
+        {
+          "label": "Forward",
+          "keys": "Alt+Right",
+          "exec": "fili-im ctl --pid %pid action forward"
+        },
+        {
+          "sep": true
+        },
+        {
           "label": "Next Conversation",
           "keys": "Alt+Down",
           "exec": "fili-im ctl --pid %pid action next-conversation"

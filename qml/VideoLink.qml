@@ -3,6 +3,7 @@
 import QtQuick
 import QtMultimedia
 import Fili.Im
+import Fili.UI
 
 Item {
     id: v
@@ -81,7 +82,7 @@ Item {
         Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: parent.width * 0.4; color: FiliTheme.text }
     }
     // Looking the stream up, or the player waiting for data: an endless spinner
-    Spinner {
+    FiliSpinner {
         anchors.centerIn: parent
         size: v.compact ? 80 : 140
         onDark: true
@@ -105,7 +106,7 @@ Item {
             style: Text.Outline
             styleColor: "black"
         }
-        TextButton {
+        FiliButton {
             anchors.horizontalCenter: parent.horizontalCenter
             label: Conversations.tr("Play in mpv")
             primary: true
@@ -138,7 +139,7 @@ Item {
             }
         }
     }
-    IconButton {
+    FiliIconButton {
         visible: v.compact && v.phase !== "idle"
         anchors { top: parent.top; right: parent.right; margins: FiliTheme.space1 }
         name: "maximize"

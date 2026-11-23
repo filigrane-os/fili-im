@@ -2,6 +2,7 @@
 // like Facteur's.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: side
@@ -176,7 +177,7 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: FiliTheme.sideRowHeight + FiliTheme.space2
         color: "transparent"
-        TextButton {
+        FiliButton {
             anchors { left: parent.left; leftMargin: FiliTheme.margin - FiliTheme.space3; verticalCenter: parent.verticalCenter }
             label: Conversations.tr("Add Account…")
             onClicked: { const p = mapToItem(null, 0, 0); win.addAccount(p.x, p.y - 80); }

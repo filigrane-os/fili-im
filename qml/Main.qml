@@ -3,9 +3,12 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import Fili.Im
+import Fili.UI
 
 ApplicationWindow {
     id: win
+    // The kit reads the theme through the application's object. Evaluated first: the tokens must be right from the first binding
+    readonly property bool kitReady: { FiliHost.backend = Conversations; return true; }
     property bool windowButtons: Conversations.uiGet("window_buttons") !== "0"
     function toggleWindowButtons() {
         windowButtons = !windowButtons;
@@ -342,6 +345,10 @@ ApplicationWindow {
     // ---- Conversations and tabs ---------------------------------------------------------------------------
     function openChat(id) {
         id = canon(id);
+        if (!walking && history[historyAt] !== id) {
+            history = history.slice(Math.max(0, historyAt - 48), historyAt + 1).concat([id]);
+            historyAt = history.length - 1;
+        }
         if (!tabs.includes(id)) tabs = tabs.concat([id]);
         current = id;
         scope = 0;
@@ -354,11 +361,41 @@ ApplicationWindow {
         conversation.load();
         groupIds(id).forEach(x => { const c = chatById(x); if (c && c.unread > 0) rpc("mark_read", { chat: x, receipt: "auto" }, null, null); });
     }
+    // History of the conversations shown, like the back / forward of a browser: opening one drops what was ahead of the
+    // place in the history; walk() goes through it without writing to it
+    property var history: []
+    property int historyAt: -1
+    property bool walking: false
+    readonly property bool canBack: history.slice(0, historyAt).some(id => chatById(id) !== null)
+    readonly property bool canForward: history.slice(historyAt + 1).some(id => chatById(id) !== null)
+    function walk(step) {
+        let i = historyAt + step;
+        while (i >= 0 && i < history.length && chatById(history[i]) === null) i += step;
+        if (i < 0 || i >= history.length) return;
+        historyAt = i;
+        walking = true;
+        openChat(history[i]);
+        walking = false;
+    }
     function closeTab(id) {
         const i = tabs.indexOf(id);
         if (i < 0) return;
         tabs = tabs.filter(t => t !== id);
         if (current === id) { current = tabs.length ? tabs[Math.min(i, tabs.length - 1)] : 0; if (current) conversation.load(); }
+    }
+    // What the tab row shows for each open conversation: its title, the unread count, a dot per platform when there are several.
+    // The model is replaced only when something shown changed (a new model rebuilds the row)
+    property var tabItems: []
+    readonly property var tabItemsNow: tabs.map(id => {
+        const c = chatById(id), n = groupUnread(id);
+        return { label: c ? c.title : "", count: n > 0 ? String(n) : "", dots: multi ? groupIds(id).map(x => platformColor(platformOf(chatById(x)))).map(String) : [] };
+    })
+    onTabItemsNowChanged: if (JSON.stringify(tabItemsNow) !== JSON.stringify(tabItems)) tabItems = tabItemsNow
+    function moveTab(from, to) {
+        if (from === to || from < 0 || from >= tabs.length) return;
+        const list = tabs.slice();
+        list.splice(to, 0, list.splice(from, 1)[0]);
+        tabs = list;
     }
     function cycleTab(step) {
         if (tabs.length < 2) return;
@@ -405,6 +442,8 @@ ApplicationWindow {
             else if (name === "search-all") win.openSearch();
             else if (name === "all") win.filter = "all";
             else if (name === "unread-box") win.filter = "unread";
+            else if (name === "back") win.walk(-1);
+            else if (name === "forward") win.walk(1);
             else if (name === "next-tab") win.cycleTab(1);
             else if (name === "previous-tab") win.cycleTab(-1);
             else if (name === "close-tab") win.closeTab(win.current);
@@ -429,6 +468,8 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+Q", "Ctrl+W"]; onActivated: win.tabs.length > 0 && win.current ? win.closeTab(win.current) : Qt.quit() }
     Shortcut { sequences: ["Ctrl+Tab"]; onActivated: win.cycleTab(1) }
     Shortcut { sequences: ["Ctrl+Shift+Tab"]; onActivated: win.cycleTab(-1) }
+    Shortcut { sequences: ["Alt+Left"]; onActivated: win.walk(-1) }
+    Shortcut { sequences: ["Alt+Right"]; onActivated: win.walk(1) }
     Shortcut { sequences: ["Alt+Down"]; onActivated: win.cycleChat(1) }
     Shortcut { sequences: ["Alt+Up"]; onActivated: win.cycleChat(-1) }
     // Ctrl+F looks in the open conversation (or in all the conversations of the person), Ctrl+Shift+F in every message
@@ -451,8 +492,18 @@ ApplicationWindow {
         color: win.attending ? FiliTheme.accentColor : FiliTheme.background
         MouseArea { anchors.fill: parent; z: -1; enabled: win.attending; onClicked: win.attentionText = "" }
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
+        // Back / forward through the conversations shown (Alt+Left / Alt+Right)
+        FiliNavCapsule {
+            id: nav
+            x: FiliTheme.margin
+            anchors.verticalCenter: parent.verticalCenter
+            canBack: win.canBack
+            canForward: win.canForward
+            onBack: win.walk(-1)
+            onForward: win.walk(1)
+        }
         Column {
-            anchors { left: parent.left; leftMargin: FiliTheme.margin; right: tools.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
+            anchors { left: nav.right; leftMargin: FiliTheme.space3; right: tools.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             Text {
                 width: parent.width
                 text: win.query !== "" ? Conversations.tr("Search") : win.filterTitle()
@@ -477,8 +528,8 @@ ApplicationWindow {
             anchors { right: search.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
             spacing: FiliTheme.space1
             // Where it matters: write to someone (Ctrl+K), and the user's status (a click opens the choices)
-            IconButton { name: "compose"; accented: win.attending; ink: win.onAccent; tip: Conversations.tr("New conversation") + "  Ctrl+K"; onClicked: switchCard.show() }
-            IconButton {
+            FiliIconButton { name: "compose"; accented: win.attending; ink: win.onAccent; tip: Conversations.tr("New conversation") + "  Ctrl+K"; onClicked: switchCard.show() }
+            FiliIconButton {
                 id: statusButton
                 accented: win.attending
                 ink: win.onAccent
@@ -513,7 +564,7 @@ ApplicationWindow {
             Accessible.role: Accessible.Button
             Accessible.name: Conversations.tr("Window")
         }
-        LiaButton {
+        FiliLiaButton {
             id: liaButton
             visible: Conversations.liaAvailable()
             anchors { right: win.windowButtons ? windowButton.left : parent.right; rightMargin: win.windowButtons ? FiliTheme.space1 : FiliTheme.margin; verticalCenter: parent.verticalCenter }
@@ -544,7 +595,7 @@ ApplicationWindow {
                 height: 18
                 radius: 9
                 color: searchClearArea.containsMouse ? FiliTheme.surfaceHover : "transparent"
-                Icon { anchors.centerIn: parent; name: "x"; size: 12; color: FiliTheme.textSecondary }
+                FiliIcon { anchors.centerIn: parent; name: "x"; size: 12; color: FiliTheme.textSecondary }
                 MouseArea { id: searchClearArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { searchInput.text = ""; win.query = ""; win.results = []; searchInput.forceActiveFocus(); } }
             }
             TextInput {
@@ -579,9 +630,19 @@ ApplicationWindow {
     }
     Item {
         anchors { top: toolbar.bottom; bottom: debug.top; left: chatList.right; right: parent.right }
-        TabBar {
+        // Open conversations as tabs, from the first one: the kit's tab row (move, close). A conversation lives in this
+        // window only, so a tab does not detach
+        FiliTabBar {
             id: tabBar
+            visible: win.tabs.length > 0
+            height: visible ? FiliTheme.tabBarHeight : 0
             anchors { top: parent.top; left: parent.left; right: parent.right }
+            detachable: false
+            model: win.tabItems
+            currentIndex: win.tabs.indexOf(win.current)
+            onTabClicked: index => win.openChat(win.tabs[index])
+            onCloseRequested: index => win.closeTab(win.tabs[index])
+            onReordered: (from, to) => win.moveTab(from, to)
         }
         Conversation {
             id: conversation
@@ -590,7 +651,7 @@ ApplicationWindow {
     }
 
     // Debug panel (View > Debug Logs): the log of the window above the footer, or at the bottom when it is hidden
-    DebugPanel {
+    FiliDebugPanel {
         id: debug
         anchors { bottom: footer.top; left: parent.left; right: parent.right }
     }
@@ -641,7 +702,7 @@ ApplicationWindow {
     }
 
     PairDialog { id: pairDialog; anchors.fill: parent }
-    WindowPanel {
+    FiliWindowPanel {
         id: windowPanel
         anchorRight: width - (toolbar.height - closeButton.height) / 2
         anchorTop: toolbar.height + 1
@@ -651,12 +712,12 @@ ApplicationWindow {
     SwitchCard { id: switchCard; anchors.fill: parent; onForwardTo: (m, chat) => win.sendForward(m, chat) }
     ContactCard { id: contactCard; anchors.fill: parent }
     QuickLook { id: quickLookCard; anchors.fill: parent }
-    PopupMenu {
+    FiliMenu {
         id: statusMenu
         property string account: ""
         anchors.fill: parent
         onActivated: id => win.rpc("presence.set", account !== "" ? { account: account, state: id } : { state: id })
     }
-    PopupMenu { id: ctxMenu; anchors.fill: parent; onActivated: id => win.runContext(id) }
+    FiliMenu { id: ctxMenu; anchors.fill: parent; onActivated: id => win.runContext(id) }
     EmojiPicker { id: emojiPicker; anchors.fill: parent; onPicked: e => { if (win.emojiTarget) win.rpc("react", { message: win.emojiTarget.id, emoji: e }); } }
 }

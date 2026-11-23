@@ -4,6 +4,7 @@
 import QtQuick
 import QtMultimedia
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: ql
@@ -197,9 +198,9 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
             }
-            IconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current.m; ql.close(); win.forwardMessage(m); } }
-            IconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isPage; onClicked: ql.openWithApp() }
-            IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: ql.close() }
+            FiliIconButton { name: "forward"; tip: Conversations.tr("Forward"); onClicked: { const m = ql.current.m; ql.close(); win.forwardMessage(m); } }
+            FiliIconButton { name: "download"; tip: Conversations.tr("Open with the default application"); enabledState: ql.path !== "" || ql.isPage; onClicked: ql.openWithApp() }
+            FiliIconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: ql.close() }
         }
     }
 
@@ -260,7 +261,7 @@ Rectangle {
                 font.pixelSize: FiliTheme.sizeList
                 color: FiliTheme.muted
             }
-            TextButton {
+            FiliButton {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: !ql.isAudio && ql.path !== ""
                 label: Conversations.tr("Open")
@@ -278,7 +279,7 @@ Rectangle {
             startAt: ql.startAt
         }
         // Waiting / failure
-        Spinner {
+        FiliSpinner {
             anchors.centerIn: parent
             size: 140
             onDark: true
@@ -296,7 +297,7 @@ Rectangle {
     }
 
     // Arrows
-    IconButton {
+    FiliIconButton {
         anchors { left: parent.left; leftMargin: FiliTheme.space3; verticalCenter: stage.verticalCenter }
         name: "chevron-left"
         width: 40
@@ -304,7 +305,7 @@ Rectangle {
         visible: ql.index > 0
         onClicked: ql.go(-1)
     }
-    IconButton {
+    FiliIconButton {
         anchors { right: parent.right; rightMargin: FiliTheme.space3; verticalCenter: stage.verticalCenter }
         name: "chevron-right"
         width: 40

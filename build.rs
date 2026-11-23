@@ -1,13 +1,17 @@
 // Qt Quick interface of Conversations, compiled into the binary (module Fili.Im, qrc:/qt/qml/Fili/Im/qml/); the Rust
 // object it talks to is in src/gui/bridge.rs.
 #[cfg(feature = "gui")]
-use cxx_qt_build::{CxxQtBuilder, QmlFile, QmlModule};
+use cxx_qt_build::{CxxQtBuilder, QmlModule};
 
 #[cfg(not(feature = "gui"))]
 fn main() {}
 
 #[cfg(feature = "gui")]
 fn main() {
+    // Tokens of the shared kit (Fili.UI), for the test that checks the FiliTheme.* names used in the QML
+    if let Ok(p) = std::env::var("DEP_FILI_UI_THEME_QML") {
+        println!("cargo::rustc-env=FILI_UI_THEME_QML={p}");
+    }
     // Version of the About card: tag or commit of the repository (absent outside a repository)
     if let Ok(o) = std::process::Command::new("git").args(["describe", "--tags", "--always", "--dirty"]).output()
         && o.status.success()
@@ -23,12 +27,7 @@ fn main() {
                 "qml/Conversation.qml",
                 "qml/Bubble.qml",
                 "qml/Composer.qml",
-                "qml/TabBar.qml",
                 "qml/PairDialog.qml",
-                "qml/FiliScrollBar.qml",
-                "qml/WindowGlyph.qml",
-                "qml/WindowPanel.qml",
-                "qml/KineticScroll.qml",
                 "qml/AboutCard.qml",
                 "qml/ShortcutsCard.qml",
                 "qml/SwitchCard.qml",
@@ -36,19 +35,9 @@ fn main() {
                 "qml/QuickLook.qml",
                 "qml/Avatar.qml",
                 "qml/VideoLink.qml",
-                "qml/Spinner.qml",
-                "qml/SearchField.qml",
                 "qml/ContactCard.qml",
-                "qml/Icon.qml",
-                "qml/Field.qml",
-                "qml/IconButton.qml",
-                "qml/TextButton.qml",
-                "qml/FocusRing.qml",
-                "qml/PopupMenu.qml",
-                "qml/DebugPanel.qml",
-                "qml/LiaButton.qml",
             ])
-            .qml_file(QmlFile::from("qml/FiliTheme.qml").singleton(true))
+            .depend("Fili.UI")
             .depend("QtQuick")
             .depend("QtQuick.Controls")
             .depend("QtQuick.Dialogs")

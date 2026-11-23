@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: c
@@ -106,7 +107,7 @@ Rectangle {
             font.pixelSize: FiliTheme.sizeSmall
             color: FiliTheme.textSecondary
         }
-        IconButton { id: dismiss; anchors { right: parent.right; rightMargin: FiliTheme.margin - FiliTheme.space1; verticalCenter: parent.verticalCenter } name: "x"; tip: Conversations.tr("Cancel"); onClicked: c.cancel() }
+        FiliIconButton { id: dismiss; anchors { right: parent.right; rightMargin: FiliTheme.margin - FiliTheme.space1; verticalCenter: parent.verticalCenter } name: "x"; tip: Conversations.tr("Cancel"); onClicked: c.cancel() }
     }
     FileDialog {
         id: picker
@@ -152,7 +153,7 @@ Rectangle {
             }
         }
     }
-    IconButton {
+    FiliIconButton {
         id: attach
         anchors { left: parent.left; leftMargin: FiliTheme.margin - FiliTheme.space1; bottom: parent.bottom; bottomMargin: FiliTheme.space2 + 4 }
         name: "paperclip"
@@ -181,7 +182,7 @@ Rectangle {
         ToolTip { visible: targetArea.containsMouse; delay: 600; text: Conversations.tr("Send on…") }
     }
     // Send (something is written) or record a voice message (nothing is)
-    IconButton {
+    FiliIconButton {
         id: side
         visible: !c.recording
         anchors { right: parent.right; rightMargin: FiliTheme.margin - FiliTheme.space1; bottom: parent.bottom; bottomMargin: FiliTheme.space2 + 4 }
@@ -228,8 +229,8 @@ Rectangle {
         }
         Row {
             anchors { right: parent.right; rightMargin: FiliTheme.space1; verticalCenter: parent.verticalCenter }
-            IconButton { name: "x"; tip: Conversations.tr("Cancel"); onClicked: c.stopRecording(false) }
-            IconButton { name: "send"; tip: Conversations.tr("Send"); onClicked: c.stopRecording(true) }
+            FiliIconButton { name: "x"; tip: Conversations.tr("Cancel"); onClicked: c.stopRecording(false) }
+            FiliIconButton { name: "send"; tip: Conversations.tr("Send"); onClicked: c.stopRecording(true) }
         }
         focus: visible
         Keys.onEscapePressed: c.stopRecording(false)

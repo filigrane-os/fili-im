@@ -1,6 +1,7 @@
 // One message: sender (groups), quoted message, text (plain, selectable), media chip, reactions, time and state.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: b
@@ -219,7 +220,7 @@ Rectangle {
                 color: FiliTheme.alpha(FiliTheme.backgroundDeep, 0.6)
                 Text { anchors.centerIn: parent; text: "▶"; font.pixelSize: 18; color: FiliTheme.text }
             }
-            Spinner { anchors.centerIn: parent; size: 72; visible: b.fetching && picture.shown.status !== Image.Ready }
+            FiliSpinner { anchors.centerIn: parent; size: 72; visible: b.fetching && picture.shown.status !== Image.Ready }
             Text {
                 anchors.centerIn: parent
                 visible: picture.shown.status !== Image.Ready && !b.fetching
