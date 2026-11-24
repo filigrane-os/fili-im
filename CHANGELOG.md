@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2026-11-24
+
+- The interface controls (theme, buttons, menus, text fields, dialogs, tab row, avatars, About and shortcuts cards, window and debug panels) come from the shared `fili-ui` kit instead of local copies.
+- Back and forward capsule in the header with a history of the conversations shown: Alt+Left / Alt+Right, the bar menu and `ctl action back|forward`.
+- Open conversations are tabs that move and close like in every Filigrane application (one window: they do not detach).
+- Profile pictures show in the list, the open conversation and the contact card.
+
 ## 0.3.0 - 2026-11-22
 
 - The assistant is now named Lia: the header button and the menu entry say "Ask Lia", and the hidden brief is `shell/lia/<app_id>.md` (the older `rob/` is still read).

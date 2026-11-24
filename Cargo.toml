@@ -1,6 +1,6 @@
 [package]
 name = "fili-im"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Conversations: Filigrane's instant messaging (daemon, CLI and connectors)"
@@ -15,7 +15,7 @@ gui = ["dep:fili-ui", "dep:cxx", "dep:cxx-qt", "dep:cxx-qt-lib", "dep:cxx-qt-bui
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-fili-ui = { path = "../fili-ui-icons", optional = true }
+fili-ui = { git = "https://github.com/filigrane-os/fili-ui", tag = "v0.4.0", optional = true }
 env_logger = { version = "0.11", default-features = false }
 libc = "0.2"
 log = "0.4"
