@@ -1,8 +1,8 @@
 // Round profile picture of a conversation (asked to the daemon when first shown), the initial on a disc until then or
-// when there is none.
+// when there is none: the kit's FiliAvatar fed with the picture the daemon wrote.
 import QtQuick
-import QtQuick.Effects
 import Fili.Im
+import Fili.UI
 
 Item {
     id: av
@@ -21,42 +21,10 @@ Item {
     onChatIdChanged: want()
     onAltsChanged: want()
 
-    Rectangle {
+    FiliAvatar {
         anchors.fill: parent
-        radius: width / 2
-        color: FiliTheme.surfaceActive
-        Text {
-            anchors.centerIn: parent
-            text: av.title.trim().charAt(0).toUpperCase()
-            textFormat: Text.PlainText
-            font.family: FiliTheme.font
-            font.pixelSize: Math.round(av.size * 0.42)
-            font.weight: FiliTheme.weightAccent
-            color: FiliTheme.textSecondary
-        }
-    }
-    Image {
-        id: pic
-        anchors.fill: parent
-        visible: false
-        layer.enabled: true
+        name: av.title
+        size: av.size
         source: av.path !== "" ? "file://" + encodeURI(av.path) : ""
-        sourceSize: Qt.size(av.size * 2, av.size * 2)
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
-    }
-    Rectangle {
-        id: disc
-        anchors.fill: parent
-        radius: width / 2
-        visible: false
-        layer.enabled: true
-    }
-    MultiEffect {
-        anchors.fill: parent
-        visible: pic.status === Image.Ready
-        source: pic
-        maskEnabled: true
-        maskSource: disc
     }
 }

@@ -1,6 +1,7 @@
 // Contact (or group) card: profile picture, what is known about it, actions, and the files shared in the conversation.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: card
@@ -144,13 +145,13 @@ Rectangle {
                 Text { anchors.verticalCenter: parent.verticalCenter; text: Conversations.tr("Also on"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; color: FiliTheme.textSecondary }
                 Repeater {
                     model: win.grouped && !card.all ? win.group.filter(c => card.chat && c.id !== card.chat.id) : []
-                    TextButton { required property var modelData; label: win.platformName(win.platformOf(modelData)); onClicked: { win.setScope(modelData.id); card.show(); } }
+                    FiliButton { required property var modelData; label: win.platformName(win.platformOf(modelData)); onClicked: { win.setScope(modelData.id); card.show(); } }
                 }
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: FiliTheme.space2
-                TextButton {
+                FiliButton {
                     label: card.muted ? Conversations.tr("Unmute") : Conversations.tr("Mute…")
                     onClicked: {
                         if (card.muted) card.chats.forEach(c => win.rpc("chat.mute", { chat: c.id, until: 0 }));
@@ -159,7 +160,7 @@ Rectangle {
                             { id: "604800000", label: Conversations.tr("1 week") }, { id: "-1", label: Conversations.tr("Always") }]); }
                     }
                 }
-                TextButton {
+                FiliButton {
                     visible: card.unread > 0
                     label: Conversations.tr("Mark as Read")
                     onClicked: card.chats.forEach(c => { if (c.unread > 0) win.rpc("mark_read", { chat: c.id, receipt: true }); })
@@ -168,9 +169,9 @@ Rectangle {
             Row {
                 spacing: FiliTheme.space2
                 Text { anchors.verticalCenter: parent.verticalCenter; text: Conversations.tr("Shared files"); font.family: FiliTheme.font; font.pixelSize: FiliTheme.sizeList; font.weight: FiliTheme.weightAccent; color: FiliTheme.text }
-                TextButton { label: Conversations.tr("All files"); primary: card.filter === "all"; onClicked: card.filter = "all" }
-                TextButton { label: Conversations.tr("Photos and videos"); primary: card.filter === "visual"; onClicked: card.filter = "visual" }
-                TextButton { label: Conversations.tr("Documents"); primary: card.filter === "docs"; onClicked: card.filter = "docs" }
+                FiliButton { label: Conversations.tr("All files"); primary: card.filter === "all"; onClicked: card.filter = "all" }
+                FiliButton { label: Conversations.tr("Photos and videos"); primary: card.filter === "visual"; onClicked: card.filter = "visual" }
+                FiliButton { label: Conversations.tr("Documents"); primary: card.filter === "docs"; onClicked: card.filter = "docs" }
             }
         }
 
@@ -241,7 +242,7 @@ Rectangle {
             color: FiliTheme.muted
         }
     }
-    PopupMenu {
+    FiliMenu {
         id: muteMenu
         anchors.fill: parent
         z: 230

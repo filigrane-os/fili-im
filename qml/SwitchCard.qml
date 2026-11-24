@@ -1,6 +1,7 @@
 // Quick switcher (Ctrl+K, Ctrl+N): type a name, Enter opens the first match, arrows move, Esc closes.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: card
@@ -33,10 +34,11 @@ Rectangle {
         border.width: FiliTheme.borderWidth
         border.color: FiliTheme.border
         MouseArea { anchors.fill: parent }
-        SearchField {
+        FiliTextField {
+            clearable: true
             id: field
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: FiliTheme.space3 }
-            placeholderText: card.forwarding ? Conversations.tr("Forward to…") : Conversations.tr("Go to a conversation")
+            placeholder: card.forwarding ? Conversations.tr("Forward to…") : Conversations.tr("Go to a conversation")
             onTextChanged: card.index = 0
             Keys.onEscapePressed: card.visible = false
             Keys.onReturnPressed: card.choose(card.index)

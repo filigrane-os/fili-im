@@ -44,6 +44,16 @@
       "keys": "Alt+Up"
     },
     {
+      "name": "back",
+      "label": "Back",
+      "keys": "Alt+Left"
+    },
+    {
+      "name": "forward",
+      "label": "Forward",
+      "keys": "Alt+Right"
+    },
+    {
       "name": "next-tab",
       "label": "Next Tab",
       "keys": "Ctrl+Tab"

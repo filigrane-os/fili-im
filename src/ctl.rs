@@ -17,6 +17,8 @@ pub const ACTIONS: &[&str] = &[
     "search-all",
     "next-conversation",
     "previous-conversation",
+    "back",
+    "forward",
     "next-tab",
     "previous-tab",
     "close-tab",

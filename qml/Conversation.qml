@@ -2,6 +2,7 @@
 // (`messages.list`), older pages on demand, and kept current by the daemon's `message` events.
 import QtQuick
 import Fili.Im
+import Fili.UI
 
 Rectangle {
     id: view
@@ -31,7 +32,7 @@ Rectangle {
     property var hits: []          // matching messages, newest first
     property int hitIndex: 0
     property int highlightId: 0
-    function openFind() { finding = true; findField.forceActiveFocus(); findField.selectAll(); }
+    function openFind() { finding = true; findField.focusField(); findField.selectAll(); }
     function closeFind() { finding = false; hits = []; highlightId = 0; composer.focusInput(); }
     function runFind() {
         const q = findQuery.trim();
@@ -301,10 +302,11 @@ Rectangle {
         color: FiliTheme.backgroundDeep
         z: 6
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: FiliTheme.borderWidth; color: FiliTheme.border }
-        SearchField {
+        FiliTextField {
+            clearable: true
             id: findField
             anchors { left: parent.left; leftMargin: FiliTheme.margin; right: count.left; rightMargin: FiliTheme.space3; verticalCenter: parent.verticalCenter }
-            placeholderText: win.grouped && win.scope === 0 ? Conversations.tr("Find in all the conversations of this contact") : Conversations.tr("Find in this conversation")
+            placeholder: win.grouped && win.scope === 0 ? Conversations.tr("Find in all the conversations of this contact") : Conversations.tr("Find in this conversation")
             onTextChanged: { view.findQuery = text; findDelay.restart(); }
             Keys.onEscapePressed: view.closeFind()
             Keys.onReturnPressed: e => view.stepFind((e.modifiers & Qt.ShiftModifier) ? 1 : -1)
@@ -321,9 +323,9 @@ Rectangle {
         Row {
             id: nav
             anchors { right: parent.right; rightMargin: FiliTheme.margin; verticalCenter: parent.verticalCenter }
-            IconButton { name: "chevron-up"; tip: Conversations.tr("Older match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(1) }
-            IconButton { name: "chevron-down"; tip: Conversations.tr("Newer match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(-1) }
-            IconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: view.closeFind() }
+            FiliIconButton { name: "chevron-up"; tip: Conversations.tr("Older match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(1) }
+            FiliIconButton { name: "chevron-down"; tip: Conversations.tr("Newer match"); enabledState: view.hits.length > 0; onClicked: view.stepFind(-1) }
+            FiliIconButton { name: "x"; tip: Conversations.tr("Close"); onClicked: view.closeFind() }
         }
     }
 
@@ -359,7 +361,7 @@ Rectangle {
             width: list_.width
             height: view.more ? 32 : 0
             visible: view.more
-            TextButton { anchors.centerIn: parent; label: Conversations.tr("Load earlier messages"); onClicked: view.loadEarlier() }
+            FiliButton { anchors.centerIn: parent; label: Conversations.tr("Load earlier messages"); onClicked: view.loadEarlier() }
         }
         delegate: Item {
             id: item
@@ -430,30 +432,30 @@ Rectangle {
                     id: toolsRow
                     x: 2
                     y: 1
-                    IconButton {
+                    FiliIconButton {
                         visible: view.capsFor(tools.m).replies
                         name: "reply"
                         tip: Conversations.tr("Reply")
                         onClicked: { win.targetPick = tools.m.chat; win.replyTo = tools.m; composer.focusInput(); }
                     }
-                    IconButton {
+                    FiliIconButton {
                         name: "forward"
                         tip: Conversations.tr("Forward")
                         onClicked: win.forwardMessage(tools.m)
                     }
-                    IconButton {
+                    FiliIconButton {
                         visible: view.canReact(tools.m)
                         name: "smile"
                         tip: Conversations.tr("React")
                         onClicked: { const p = tools.mapToItem(view, 0, tools.height); view.openMenu(tools.m, p.x, p.y, "react"); }
                     }
-                    IconButton {
+                    FiliIconButton {
                         visible: tools.m.media !== null && tools.m.media !== undefined
                         name: "download"
                         tip: Conversations.tr("Open")
                         onClicked: win.quickLook(tools.m.id)
                     }
-                    IconButton {
+                    FiliIconButton {
                         name: "more"
                         tip: Conversations.tr("More")
                         onClicked: { const p = tools.mapToItem(view, 0, tools.height); view.openMenu(tools.m, p.x, p.y, "all"); }
@@ -485,7 +487,7 @@ Rectangle {
         color: FiliTheme.surface
         border.width: FiliTheme.borderWidth
         border.color: FiliTheme.border
-        IconButton {
+        FiliIconButton {
             anchors { left: parent.left; leftMargin: 2; verticalCenter: parent.verticalCenter }
             width: 28; height: 28
             name: "chevron-down"
@@ -537,7 +539,7 @@ Rectangle {
         menu.openAt(x, y, entries);
     }
 
-    PopupMenu {
+    FiliMenu {
         id: menu
         property var message: null
         onActivated: id => {
