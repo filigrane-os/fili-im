@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 - 2026-11-26
+
+- Each conversation keeps its draft (text and files waiting) when you switch to another one, until it is sent or emptied.
+- A long message scrolls inside the composer, which grows up to 140 px: the line being typed stays in view.
+- Enter makes a new line and Shift+Enter sends (they were the other way round).
+- QML tests of the composer drafts (`scripts/run-qml-tests.sh`, in `make test`).
+
 ## 0.4.0 - 2026-11-24
 
 - The interface controls (theme, buttons, menus, text fields, dialogs, tab row, avatars, About and shortcuts cards, window and debug panels) come from the shared `fili-ui` kit instead of local copies.

@@ -1,4 +1,4 @@
-// The composer: Enter sends, Shift+Enter makes a new line, Up edits the last message (when the platform allows it),
+// The composer: Enter makes a new line, Shift+Enter sends, Up edits the last message (when the platform allows it),
 // Esc drops the reply or the edit.
 import QtQuick
 import QtQuick.Controls.Basic
@@ -283,7 +283,7 @@ Rectangle {
                     if (pasted.length > 0) { c.addFiles(pasted); e.accepted = true; return; }
                 }
                 if (e.key === Qt.Key_Space && text === "" && e.modifiers === Qt.NoModifier && c.quickLookReady) { c.quickLook(); e.accepted = true; return; }
-                if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
+                if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && (e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
                 else if (e.key === Qt.Key_Escape) { c.cancel(); e.accepted = true; }
                 else if (e.key === Qt.Key_Up && text === "" && c.lastMine && c.caps && c.caps.edit) { c.startEdit(c.lastMine); e.accepted = true; }
             }
