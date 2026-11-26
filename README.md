@@ -14,6 +14,7 @@ Status: 0.1.4, with the WhatsApp and Google Messages connectors. See [docs/plan.
 
 | Version | Daemon | Connectors | Window |
 |---|---|---|---|
+| 0.4.2 | 27 MB RAM, 0 % CPU idle | WhatsApp 23 MB, Google Messages 19 MB | as 0.4.1 (one QML change) |
 | 0.4.1 | 27 MB RAM, 0 % CPU idle | WhatsApp 23 MB, Google Messages 19 MB | 139 MB just after opening |
 | 0.1.4 | 28 MB RAM, 0 % CPU idle | WhatsApp 25 MB, Google Messages 21 MB | not measured (Debug panel only adds a closed panel) |
 | 0.1.0 | 30 MB RAM, 0.1 % CPU idle | WhatsApp 26 MB, Google Messages 19 MB | about 340 MB after 8 minutes of use (Qt Quick, pictures and previews), 2.7 % CPU averaged over that time |

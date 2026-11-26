@@ -261,9 +261,23 @@ Rectangle {
         height: Math.min(140, Math.max(32, input.implicitHeight))
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        contentWidth: width
+        contentHeight: input.height
+        // Keeps the cursor in view while typing or moving in a long text
+        function ensureVisible(r) {
+            if (contentY > r.y)
+                contentY = r.y;
+            else if (contentY + height < r.y + r.height + input.bottomPadding)
+                contentY = r.y + r.height + input.bottomPadding - height;
+        }
         KineticScroll {}
-        TextArea.flickable: TextArea {
+        // A plain child, not TextArea.flickable: that moves the paddings onto the Flickable and puts the text and the
+        // placeholder off centre
+        TextArea {
             id: input
+            width: inputFlick.width
+            height: Math.max(implicitHeight, inputFlick.height)
+            onCursorRectangleChanged: inputFlick.ensureVisible(cursorRectangle)
             leftPadding: FiliTheme.space2
             rightPadding: c.choosing ? 52 : FiliTheme.space2
             topPadding: 7
