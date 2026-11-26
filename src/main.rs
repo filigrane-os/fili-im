@@ -224,7 +224,10 @@ fn run(cli: Cli) -> Result<()> {
             print(j, &json!({}), |_| format!("Removed {account}"));
         }
         Cmd::Chats { find, account, unread, limit } => {
-            let mut chats = client.call("chats.list", json!({"account": account, "unread": unread, "limit": if find.is_some() { 1000 } else { limit }}))?;
+            let mut chats = client.call(
+                "chats.list",
+                json!({"account": account, "unread": unread, "limit": if find.is_some() { 1000 } else { limit }}),
+            )?;
             if let (Some(find), Some(list)) = (&find, chats.as_array_mut()) {
                 let want = fold(find);
                 list.retain(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want));
@@ -262,15 +265,23 @@ fn run(cli: Cli) -> Result<()> {
                 Err(_) => {
                     let all = client.call("chats.list", json!({"limit": 1000}))?;
                     let want = fold(&target);
-                    let hits: Vec<&Value> =
-                        all.as_array().into_iter().flatten().filter(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want)).collect();
+                    let hits: Vec<&Value> = all
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want))
+                        .collect();
                     match hits.as_slice() {
                         [] => anyhow::bail!("no conversation matches {target:?}"),
                         [one] => (one["id"].as_i64().unwrap_or(0), one["title"].as_str().map(str::to_string)),
                         many => {
                             let list: Vec<String> =
                                 many.iter().map(|c| format!("{:>5}  {}", c["id"], c["title"].as_str().unwrap_or(""))).collect();
-                            anyhow::bail!("{} conversations match {target:?}, nothing sent; use the number:\n{}", many.len(), list.join("\n"))
+                            anyhow::bail!(
+                                "{} conversations match {target:?}, nothing sent; use the number:\n{}",
+                                many.len(),
+                                list.join("\n")
+                            )
                         }
                     }
                 }

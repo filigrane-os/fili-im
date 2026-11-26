@@ -160,7 +160,8 @@ mod tests {
     #[cfg(feature = "gui")]
     #[test]
     fn the_panel_and_the_list_agree() {
-        let qml = std::fs::read_to_string(std::path::Path::new(env!("FILI_UI_THEME_QML")).with_file_name("FiliWindowPanel.qml")).unwrap();
+        let qml = std::fs::read_to_string(std::path::Path::new(env!("FILI_UI_THEME_QML")).with_file_name("FiliWindowPanel.qml"))
+            .unwrap();
         let used: Vec<&str> = qml.split("action: \"").skip(1).filter_map(|t| t.split('"').next()).collect();
         for u in &used {
             assert!(ACTIONS.contains(u), "{u} is shown but not allowed");
