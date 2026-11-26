@@ -57,7 +57,9 @@ uninstall:
 	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/ctl/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/lia/fili-im.md
 
 test:
-	cargo test
+	# --release like every Filigrane application: the debug test binaries of the CI container do not link the cxx-qt
+	# initialisers of the fili-ui kit (undefined cxx_qt_init_crate_*), the release ones do
+	cargo test --release
 	scripts/run-qml-tests.sh
 	python3 -I scripts/check-i18n.py
 	python3 -I scripts/check-shell-menu.py
