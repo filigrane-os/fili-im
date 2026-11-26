@@ -8,6 +8,12 @@
 //! - `FILI_IM_FAKE_INCOMING_S=N`: a new message from Paul every N seconds (interface work).
 //! - `FILI_IM_FAKE_CRASH_MS=N`: the first run exits with status 3 after N ms (tests the daemon's restart).
 use fili_im::protocol::*;
+
+// With the window built (feature gui), cxx-qt links the initialisers of the fili-ui kit and of this crate into every binary;
+// they only resolve when the binary refers to the window code, as fili-im does. This one never runs it.
+#[cfg(feature = "gui")]
+#[used]
+static LINK_THE_WINDOW: fn() -> i32 = fili_im::gui::run;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};

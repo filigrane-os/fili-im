@@ -1,5 +1,11 @@
 //! `fili-im`: Conversations. `daemon` runs the daemon; the other subcommands talk to it. Without a subcommand it opens
 //! the window; `ctl` commands an open window (the fili-bar menu).
+// The test build of this binary never calls the window: refer to it so the cxx-qt initialisers that the gui feature links
+// into every binary resolve (see src/bin/fili-im-fake.rs)
+#[cfg(all(test, feature = "gui"))]
+#[used]
+static LINK_THE_WINDOW: fn() -> i32 = fili_im::gui::run;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fili_im::client::Client;
