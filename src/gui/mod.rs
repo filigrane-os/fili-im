@@ -28,7 +28,7 @@ pub fn run() -> i32 {
     // Wayland app-id (niri rules, fili-im.desktop)
     QGuiApplication::set_desktop_file_name(&QString::from("fili-im"));
     let mut engine = QQmlApplicationEngine::new();
-    if let Some(mut engine) = engine.as_mut() {
+    if let Some(engine) = engine.as_mut() {
         // Development (`make run`): the QML is read from the source folders instead of the binary, so a change of a .qml file
         // needs no build. FILI_QML_DIR holds Main.qml.
         match std::env::var("FILI_QML_DIR") {
