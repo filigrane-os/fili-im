@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 - 2026-11-26
+
+- The text and the placeholder of the composer sit in the middle of the field again (0.4.1 put them low).
+
 ## 0.4.1 - 2026-11-26
 
 - Each conversation keeps its draft (text and files waiting) when you switch to another one, until it is sent or emptied.
