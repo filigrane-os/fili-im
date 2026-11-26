@@ -2,10 +2,12 @@
 
 ## 0.5.0 - 2026-11-26
 
-- The Window button of the header is the kit's (`fili-ui` v0.6.0): a click maximizes the column (niri's Mod+F) or gives it back its
+- The Window button of the header is the kit's (`fili-ui` v0.7.1): a click maximizes the column (niri's Mod+F) or gives it back its
   width, and its picture shows which; resting the pointer on it for a second opens the window panel, a right click opens it at once.
-- A softer selection from the kit: the current tab, the selected sidebar row and selected text are a translucent wash of the accent
+- A clearer selection from the kit: the current tab, the selected sidebar row and selected text are a translucent wash of the accent
   instead of grey steps; the kit's dialogs have a × at the top right.
+- The bar module shows unread messages in the normal text colour instead of the warning yellow.
+- `make run` starts the development build with the QML read from `qml/`: a change of a .qml file needs no build.
 
 ## 0.4.2 - 2026-11-26
 
