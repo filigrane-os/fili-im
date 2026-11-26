@@ -23,7 +23,7 @@ Rectangle {
     // Files waiting to go with the next message: [{path, name}]
     property var files: []
     color: FiliTheme.background
-    height: bar.height + chips.height + input.height + 2 * FiliTheme.space2 + FiliTheme.borderWidth
+    height: bar.height + chips.height + inputFlick.height + 2 * FiliTheme.space2 + FiliTheme.borderWidth
     Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: FiliTheme.borderWidth; color: FiliTheme.border }
 
     // ---- Voice messages: the microphone is recorded to an Ogg Opus file and sent as a voice note --------------------
@@ -90,7 +90,22 @@ Rectangle {
         cancel();
         c.sent();
     }
-    Connections { target: win; function onCurrentChanged() { c.cancel(); c.files = []; input.text = ""; } }
+    // One draft per conversation (Drafts.qml): what was written stays with its conversation
+    Drafts { id: drafts }
+    property int draftChat: 0
+    Component.onCompleted: draftChat = win.current
+    Connections {
+        target: win
+        function onCurrentChanged() {
+            drafts.leave(c.draftChat, input.text, c.files, c.editing !== null);
+            c.cancel();
+            const d = drafts.enter(win.current);
+            c.files = d.files;
+            input.text = d.text;
+            input.cursorPosition = input.length;
+            c.draftChat = win.current;
+        }
+    }
 
     Rectangle {
         id: bar
@@ -196,7 +211,7 @@ Rectangle {
     Rectangle {
         id: field
         anchors { left: attach.right; right: side.left; bottom: parent.bottom; leftMargin: FiliTheme.space1; rightMargin: FiliTheme.space1; bottomMargin: FiliTheme.space2 }
-        height: input.height
+        height: inputFlick.height
         radius: FiliTheme.radiusControl
         color: FiliTheme.surface
         border.width: FiliTheme.borderWidth
@@ -238,32 +253,41 @@ Rectangle {
         Keys.onEnterPressed: c.stopRecording(true)
         onVisibleChanged: if (visible) forceActiveFocus(); else input.forceActiveFocus()
     }
-    TextArea {
-        id: input
+    // The field grows with the text up to 140 px, then scrolls inside: the line being typed (the cursor) stays in view,
+    // the wheel, the touchpad and the bar on the right reach the rest
+    Flickable {
+        id: inputFlick
         anchors { left: field.left; right: field.right; bottom: field.bottom }
-        height: Math.min(140, Math.max(32, contentHeight + 2 * topPadding))
-        leftPadding: FiliTheme.space2
-        rightPadding: c.choosing ? 52 : FiliTheme.space2
-        topPadding: 7
-        bottomPadding: 7
-        wrapMode: TextArea.Wrap
-        placeholderText: Conversations.tr("Message")
-        placeholderTextColor: FiliTheme.muted
-        font.family: FiliTheme.font
-        font.pixelSize: FiliTheme.size
-        color: FiliTheme.text
-        selectionColor: FiliTheme.surfaceActive
-        selectedTextColor: FiliTheme.text
-        background: null
-        Keys.onPressed: e => {
-            if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier)) {
-                const pasted = JSON.parse(Conversations.clipboardFiles());
-                if (pasted.length > 0) { c.addFiles(pasted); e.accepted = true; return; }
+        height: Math.min(140, Math.max(32, input.implicitHeight))
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        KineticScroll {}
+        TextArea.flickable: TextArea {
+            id: input
+            leftPadding: FiliTheme.space2
+            rightPadding: c.choosing ? 52 : FiliTheme.space2
+            topPadding: 7
+            bottomPadding: 7
+            wrapMode: TextArea.Wrap
+            placeholderText: Conversations.tr("Message")
+            placeholderTextColor: FiliTheme.muted
+            font.family: FiliTheme.font
+            font.pixelSize: FiliTheme.size
+            color: FiliTheme.text
+            selectionColor: FiliTheme.surfaceActive
+            selectedTextColor: FiliTheme.text
+            background: null
+            Keys.onPressed: e => {
+                if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier)) {
+                    const pasted = JSON.parse(Conversations.clipboardFiles());
+                    if (pasted.length > 0) { c.addFiles(pasted); e.accepted = true; return; }
+                }
+                if (e.key === Qt.Key_Space && text === "" && e.modifiers === Qt.NoModifier && c.quickLookReady) { c.quickLook(); e.accepted = true; return; }
+                if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
+                else if (e.key === Qt.Key_Escape) { c.cancel(); e.accepted = true; }
+                else if (e.key === Qt.Key_Up && text === "" && c.lastMine && c.caps && c.caps.edit) { c.startEdit(c.lastMine); e.accepted = true; }
             }
-            if (e.key === Qt.Key_Space && text === "" && e.modifiers === Qt.NoModifier && c.quickLookReady) { c.quickLook(); e.accepted = true; return; }
-            if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) { c.submit(); e.accepted = true; }
-            else if (e.key === Qt.Key_Escape) { c.cancel(); e.accepted = true; }
-            else if (e.key === Qt.Key_Up && text === "" && c.lastMine && c.caps && c.caps.edit) { c.startEdit(c.lastMine); e.accepted = true; }
         }
     }
+    FiliScrollBar { flick: inputFlick; anchors { top: inputFlick.top; bottom: inputFlick.bottom; right: inputFlick.right } }
 }
