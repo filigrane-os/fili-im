@@ -121,7 +121,7 @@ Facteur's footer and tabs), checked by `tests/fili-shell/check-app-window.py`.
 - **Tabs** (band 40, tab 28, Facteur's look): open conversations as document tabs (Ctrl+T, Ctrl+W, Ctrl+Tab), so
   two or three conversations can be followed side by side; the conversation list itself is the first, fixed view.
 - **Content**: conversation list column, then the conversation (bubbles, day separators, replies, reactions, media
-  thumbnails, typing indicator) and the composer (Enter sends, Shift+Enter new line, paste or drop files, reply
+  thumbnails, typing indicator) and the composer (Shift+Enter sends, Enter new line, paste or drop files, reply
   quote, edit last message with Up when `message.edit` allows it).
 - **Footer 28** on `backgroundDeep`: per-account state, operations (sending 3 files…), errors and notices ("WhatsApp:
   the phone has been offline for 9 days, open WhatsApp on it"). Shown, hidden and brought back for an operation as

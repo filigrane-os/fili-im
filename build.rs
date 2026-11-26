@@ -27,6 +27,7 @@ fn main() {
                 "qml/Conversation.qml",
                 "qml/Bubble.qml",
                 "qml/Composer.qml",
+                "qml/Drafts.qml",
                 "qml/PairDialog.qml",
                 "qml/AboutCard.qml",
                 "qml/ShortcutsCard.qml",

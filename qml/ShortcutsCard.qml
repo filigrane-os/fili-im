@@ -20,7 +20,7 @@ FiliShortcutsCard {
         ] },
         { title: Conversations.tr("Writing"), rows: [
             ["Ctrl+L", Conversations.tr("Write a message")],
-            ["Enter  Shift+Enter", Conversations.tr("Send, new line")],
+            ["Shift+Enter  Enter", Conversations.tr("Send, new line")],
             ["↑", Conversations.tr("Edit your last message (empty field)")],
             ["Ctrl+Shift+U", Conversations.tr("Send files")],
             ["Ctrl+V", Conversations.tr("Paste a picture or files")],
