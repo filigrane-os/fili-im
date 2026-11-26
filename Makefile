@@ -58,6 +58,7 @@ uninstall:
 
 test:
 	cargo test
+	scripts/run-qml-tests.sh
 	python3 -I scripts/check-i18n.py
 	python3 -I scripts/check-shell-menu.py
 	python3 -I scripts/fili-api-lint --app .
@@ -77,4 +78,5 @@ check: build
 	test -z "$$(cd connectors/gmessages && gofmt -l .)"
 	cd connectors/gmessages && go vet ./... && go test ./...
 	cargo test
+	scripts/run-qml-tests.sh
 	FILI_IM_CONNECTOR=$(CURDIR)/target/debug/fili-im-whatsapp cargo test --test conformance
