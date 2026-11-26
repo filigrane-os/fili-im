@@ -19,7 +19,7 @@ BarModule {
             kind: "messages"
             title: FiliI18n.tr("Messages")
             glyph: "󰖣"
-            accent: FiliTheme.barWarn
+            accent: FiliTheme.barText
             openHint: FiliI18n.tr("click: panel · right click: menu · middle click: open Conversations")
             click: ""
             mclick: "fili-im"
