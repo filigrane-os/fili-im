@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-11-26
+
+- The Window button of the header is the kit's (`fili-ui` v0.7.1): a click maximizes the column (niri's Mod+F) or gives it back its
+  width, and its picture shows which; resting the pointer on it for a second opens the window panel, a right click opens it at once.
+- A clearer selection from the kit: the current tab, the selected sidebar row and selected text are a translucent wash of the accent
+  instead of grey steps; the kit's dialogs have a × at the top right.
+- The bar module shows unread messages in the normal text colour instead of the warning yellow.
+- `make run` starts the development build with the QML read from `qml/`: a change of a .qml file needs no build.
+
 ## 0.4.2 - 2026-11-26
 
 - The text and the placeholder of the composer sit in the middle of the field again (0.4.1 put them low).

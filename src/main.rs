@@ -1,5 +1,11 @@
 //! `fili-im`: Conversations. `daemon` runs the daemon; the other subcommands talk to it. Without a subcommand it opens
 //! the window; `ctl` commands an open window (the fili-bar menu).
+// The test build of this binary never calls the window: refer to it so the cxx-qt initialisers that the gui feature links
+// into every binary resolve (see src/bin/fili-im-fake.rs)
+#[cfg(all(test, feature = "gui"))]
+#[used]
+static LINK_THE_WINDOW: fn() -> i32 = fili_im::gui::run;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fili_im::client::Client;
@@ -224,7 +230,10 @@ fn run(cli: Cli) -> Result<()> {
             print(j, &json!({}), |_| format!("Removed {account}"));
         }
         Cmd::Chats { find, account, unread, limit } => {
-            let mut chats = client.call("chats.list", json!({"account": account, "unread": unread, "limit": if find.is_some() { 1000 } else { limit }}))?;
+            let mut chats = client.call(
+                "chats.list",
+                json!({"account": account, "unread": unread, "limit": if find.is_some() { 1000 } else { limit }}),
+            )?;
             if let (Some(find), Some(list)) = (&find, chats.as_array_mut()) {
                 let want = fold(find);
                 list.retain(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want));
@@ -262,15 +271,23 @@ fn run(cli: Cli) -> Result<()> {
                 Err(_) => {
                     let all = client.call("chats.list", json!({"limit": 1000}))?;
                     let want = fold(&target);
-                    let hits: Vec<&Value> =
-                        all.as_array().into_iter().flatten().filter(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want)).collect();
+                    let hits: Vec<&Value> = all
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|c| fold(c["title"].as_str().unwrap_or("")).contains(&want))
+                        .collect();
                     match hits.as_slice() {
                         [] => anyhow::bail!("no conversation matches {target:?}"),
                         [one] => (one["id"].as_i64().unwrap_or(0), one["title"].as_str().map(str::to_string)),
                         many => {
                             let list: Vec<String> =
                                 many.iter().map(|c| format!("{:>5}  {}", c["id"], c["title"].as_str().unwrap_or(""))).collect();
-                            anyhow::bail!("{} conversations match {target:?}, nothing sent; use the number:\n{}", many.len(), list.join("\n"))
+                            anyhow::bail!(
+                                "{} conversations match {target:?}, nothing sent; use the number:\n{}",
+                                many.len(),
+                                list.join("\n")
+                            )
                         }
                     }
                 }

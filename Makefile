@@ -16,7 +16,7 @@ DATADIR ?= $(PREFIX)/share
 TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 PROGRAMS = fili-im fili-im-whatsapp fili-im-gmessages
 
-.PHONY: build release test check fmt connectors connectors-release install install-data uninstall
+.PHONY: run build release test check fmt connectors connectors-release install install-data uninstall
 
 GO_BUILD = CGO_ENABLED=1 go build -trimpath -ldflags="-s -w"
 
@@ -57,7 +57,9 @@ uninstall:
 	rm -f $(DESTDIR)$(DATADIR)/filigrane/shell/ctl/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/appmenu/fili-im.json $(DESTDIR)$(DATADIR)/filigrane/shell/lia/fili-im.md
 
 test:
-	cargo test
+	# --release like every Filigrane application: the debug test binaries of the CI container do not link the cxx-qt
+	# initialisers of the fili-ui kit (undefined cxx_qt_init_crate_*), the release ones do
+	cargo test --release
 	scripts/run-qml-tests.sh
 	python3 -I scripts/check-i18n.py
 	python3 -I scripts/check-shell-menu.py
@@ -80,3 +82,10 @@ check: build
 	cargo test
 	scripts/run-qml-tests.sh
 	FILI_IM_CONNECTOR=$(CURDIR)/target/debug/fili-im-whatsapp cargo test --test conformance
+
+# Development. `make run` starts that build with the QML read from the source folders,
+# so after a change of a .qml file just run it again, no build. `make run ARGS=...`.
+
+run:
+	@test -x target/debug/fili-im || { echo "build first (make build)" >&2; exit 1; }
+	FILI_QML_DIR=$(CURDIR)/qml QT_QUICK_BACKEND=software target/debug/fili-im $(ARGS)
